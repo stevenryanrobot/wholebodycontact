@@ -375,6 +375,8 @@ class MotionTrackingCommand(Command):
             current_quat,
             (self._motion.root_pos_w - current_pos)
         )
+        # no move test
+        target_pos_b = torch.zeros(self.num_envs, len(self.future_steps), 3, device=self.device)
         return target_pos_b.reshape(self.num_envs, -1)
     def target_pos_b_obs_sym(self):
         return sym_utils.SymmetryTransform(
@@ -385,6 +387,8 @@ class MotionTrackingCommand(Command):
     @observation
     def target_linvel_b_obs(self):
         target_linvel_b = quat_apply_inverse(self.asset.data.root_quat_w.unsqueeze(1), self._motion.root_lin_vel_w)
+        # no move test
+        target_linvel_b = torch.zeros_like(target_linvel_b)
         return target_linvel_b.reshape(self.num_envs, -1)
     def target_linvel_b_obs_sym(self):
         return sym_utils.SymmetryTransform(
@@ -396,6 +400,10 @@ class MotionTrackingCommand(Command):
     def target_projected_gravity_b(self):
         gravity = torch.tensor([0.0, 0.0, -1.0], device=self.device, dtype=torch.float32).reshape(1, 1, 3)
         g_b = quat_apply_inverse(self._motion.root_quat_w, gravity)  # [N, S, 3]
+        # no move test: use identity quaternion for default upright stance
+        target_root_quat = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device, dtype=torch.float32).reshape(1, 1, 4).repeat(self.num_envs, len(self.future_steps), 1)
+        g_b = quat_apply_inverse(target_root_quat, gravity)
+        
         return g_b.reshape(self.num_envs, -1)
 
     def target_projected_gravity_b_sym(self):
@@ -429,7 +437,9 @@ class MotionTrackingCommand(Command):
         relative_quat = axis_angle_from_quat(quat_mul(
             self._motion.root_quat_w,
             quat_conjugate(self.asset.data.root_quat_w.unsqueeze(1).expand_as(self._motion.root_quat_w))
-        ))
+        ))  # [N, S, 3] axis-angle
+        # no move test: use zero axis-angle (identity rotation = no relative rotation)
+        relative_quat = torch.zeros(self.num_envs, len(self.future_steps), 3, device=self.device)
         return relative_quat.reshape(self.num_envs, -1)
     def relative_quat_obs_sym(self):
         return sym_utils.SymmetryTransform(
@@ -499,6 +509,13 @@ class MotionTrackingCommand(Command):
 
         wrist_pos = pos_step[:, wrist_idx, :]   # [N, 2, 3]
         wrist_rot = rot_step[:, wrist_idx, :]   # [N, 2, 4]
+
+        # fixed ee pos and rot test - left and right hands with symmetric y
+        left_wrist_pos = torch.tensor([0.15, 0.1, 0.0], device=self.device, dtype=torch.float32)
+        right_wrist_pos = torch.tensor([0.15, -0.1, 0.0], device=self.device, dtype=torch.float32)
+        wrist_pos = torch.stack([left_wrist_pos, right_wrist_pos]).unsqueeze(0).expand(self.num_envs, -1, -1)
+        wrist_rot = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device, dtype=torch.float32).reshape(1, 1, 4).expand(self.num_envs, 2, -1)
+
         wrist_axis_ang = axis_angle_from_quat(wrist_rot)  # [N, 2, 3]
 
         # TEST: zero root command to see if robot stands still
@@ -507,9 +524,9 @@ class MotionTrackingCommand(Command):
 
         # Pack: root_pos(3), left_pos(3), right_pos(3), root_aa(3), left_aa(3), right_aa(3)
         out = torch.cat([
-            root_pos_w,                                  # [N, 3]
+            # root_pos_w,                                  # [N, 3]
             wrist_pos.reshape(self.num_envs, -1),        # [N, 6]
-            root_axis_ang,                               # [N, 3]
+            # root_axis_ang,                               # [N, 3]
             wrist_axis_ang.reshape(self.num_envs, -1),   # [N, 6]
         ], dim=-1)  # [N, 18]
         # print(f"root_and_wrist_6d output shape: {out.shape}", flush=True)
@@ -519,20 +536,17 @@ class MotionTrackingCommand(Command):
 
     def root_and_wrist_6d_sym(self):
         """
-        Symmetry for root_and_wrist_6d:
-        - root pos/ori: flip y sign
+        Symmetry for root_and_wrist_6d (wrist only, root commented out):
         - left/right wrist: swap and flip y sign
         """
-        # Position symmetry: root(3) + left_wrist(3) + right_wrist(3) = 9
-        # root pos: [0,1,2] -> [0,1,2] with signs [1,-1,1]
-        # left/right swap: [3,4,5] <-> [6,7,8] with signs [1,-1,1]
-        pos_perm = torch.tensor([0, 1, 2, 6, 7, 8, 3, 4, 5])
-        pos_signs = torch.tensor([1., -1., 1., 1., -1., 1., 1., -1., 1.])
+        # Now only wrist data: left_wrist(3) + right_wrist(3) + left_aa(3) + right_aa(3) = 12
+        # Position: [0,1,2] left, [3,4,5] right -> swap to [3,4,5] right, [0,1,2] left with flipped y
+        pos_perm = torch.tensor([3, 4, 5, 0, 1, 2])
+        pos_signs = torch.tensor([1., -1., 1., 1., -1., 1.])
         
-        # Orientation symmetry: root(3) + left_wrist(3) + right_wrist(3) = 9
-        # same pattern as position
-        ori_perm = torch.tensor([0, 1, 2, 6, 7, 8, 3, 4, 5]) + 9  # offset by 9
-        ori_signs = torch.tensor([-1., 1., -1., -1., 1., -1., -1., 1., -1.])
+        # Orientation: same pattern as position [6-8] left, [9-11] right -> swap with flipped signs
+        ori_perm = torch.tensor([9, 10, 11, 6, 7, 8])
+        ori_signs = torch.tensor([-1., 1., -1., -1., 1., -1.])
         
         perm = torch.cat([pos_perm, ori_perm])
         signs = torch.cat([pos_signs, ori_signs])
