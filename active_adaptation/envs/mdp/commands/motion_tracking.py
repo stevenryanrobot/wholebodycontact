@@ -874,29 +874,29 @@ class MotionTrackingCommand(Command):
         robot_keypoints_w = self.asset.data.body_pos_w[:, self.keypoint_idx_asset]
 
         # draw points and error vectors
-        self.env.debug_draw.point(
-            target_keypoints_w.reshape(-1, 3), color=(1, 0, 0, 1)
-        )
-        self.env.debug_draw.point(
-            robot_keypoints_w.reshape(-1, 3), color=(0, 1, 0, 1)
-        )
-        self.env.debug_draw.vector(
-            robot_keypoints_w.reshape(-1, 3),
-            (target_keypoints_w - robot_keypoints_w).reshape(-1, 3),
-            color=(0, 0, 1, 1)
-        )
+        # self.env.debug_draw.point(
+        #     target_keypoints_w.reshape(-1, 3), color=(1, 0, 0, 1)
+        # )
+        # self.env.debug_draw.point(
+        #     robot_keypoints_w.reshape(-1, 3), color=(0, 1, 0, 1)
+        # )
+        # self.env.debug_draw.vector(
+        #     robot_keypoints_w.reshape(-1, 3),
+        #     (target_keypoints_w - robot_keypoints_w).reshape(-1, 3),
+        #     color=(0, 0, 1, 1)
+        # )
         
-        self.env.debug_draw.vector(
-            root_pos.reshape(-1, 3),
-            heading_world.reshape(-1, 3),
-            color=(0, 0, 1, 2)
-        )
+        # self.env.debug_draw.vector(
+        #     root_pos.reshape(-1, 3),
+        #     heading_world.reshape(-1, 3),
+        #     color=(0, 0, 1, 2)
+        # )
         
-        self.env.debug_draw.vector(
-            root_pos.reshape(-1, 3),
-            heading_world_target.reshape(-1, 3),
-            color=(1, 0, 0, 2)
-        )
+        # self.env.debug_draw.vector(
+        #     root_pos.reshape(-1, 3),
+        #     heading_world_target.reshape(-1, 3),
+        #     color=(1, 0, 0, 2)
+        # )
 
         # —— root_and_wrist_6d target visualization (from UDP teleop) ——
         # Wrist positions are in robot's root frame, transform using each robot's root
@@ -919,21 +919,108 @@ class MotionTrackingCommand(Command):
                 
                 # Transform to world frame using each robot's root
                 head_pos_w = quat_apply(robot_root_quat, head_pos_b) + robot_root_pos  # [N, 3]
-                l_pos_w = quat_apply(robot_root_quat, l_pos_b) + robot_root_pos        # [N, 3]
-                r_pos_w = quat_apply(robot_root_quat, r_pos_b) + robot_root_pos        # [N, 3]
+                l_target_w = quat_apply(robot_root_quat, l_pos_b) + robot_root_pos     # [N, 3]
+                r_target_w = quat_apply(robot_root_quat, r_pos_b) + robot_root_pos     # [N, 3]
                 
-                # yellow points for head (all envs)
+                # yellow points for head target (all envs)
                 self.env.debug_draw.point(
                     head_pos_w, color=(1, 1, 0, 1), size=15.0
                 )
-                # cyan points for left wrist (all envs)
+                # cyan points for left wrist target (all envs)
                 self.env.debug_draw.point(
-                    l_pos_w, color=(0, 1, 1, 1), size=12.0
+                    l_target_w, color=(0, 1, 1, 1), size=12.0
                 )
-                # cyan points for right wrist (all envs)
+                # cyan points for right wrist target (all envs)
                 self.env.debug_draw.point(
-                    r_pos_w, color=(0, 1, 1, 1), size=12.0
+                    r_target_w, color=(0, 1, 1, 1), size=12.0
                 )
+                
+                # —— Target orientation visualization (coordinate axes) ——
+                # Get quaternions from UDP and expand to all envs
+                l_quat_b_exp = l_quat_b.to(self.device).unsqueeze(0).expand(self.num_envs, -1)  # [N, 4]
+                r_quat_b_exp = r_quat_b.to(self.device).unsqueeze(0).expand(self.num_envs, -1)  # [N, 4]
+                
+                # Transform quaternions to world frame: q_world = q_root * q_body
+                l_quat_w = quat_mul(robot_root_quat, l_quat_b_exp)  # [N, 4]
+                r_quat_w = quat_mul(robot_root_quat, r_quat_b_exp)  # [N, 4]
+                
+                # Axis length for visualization
+                axis_len = 0.08
+                
+                # Unit vectors for xyz axes
+                x_axis = torch.tensor([1.0, 0.0, 0.0], device=self.device).expand(self.num_envs, -1)
+                y_axis = torch.tensor([0.0, 1.0, 0.0], device=self.device).expand(self.num_envs, -1)
+                z_axis = torch.tensor([0.0, 0.0, 1.0], device=self.device).expand(self.num_envs, -1)
+                
+                # Left wrist target axes (lighter/brighter colors for target)
+                l_x_w = quat_apply(l_quat_w, x_axis) * axis_len
+                l_y_w = quat_apply(l_quat_w, y_axis) * axis_len
+                l_z_w = quat_apply(l_quat_w, z_axis) * axis_len
+                self.env.debug_draw.vector(l_target_w, l_x_w, color=(1.0, 0.4, 0.4, 1.0), size=3.0)  # light red
+                self.env.debug_draw.vector(l_target_w, l_y_w, color=(0.4, 1.0, 0.4, 1.0), size=3.0)  # light green
+                self.env.debug_draw.vector(l_target_w, l_z_w, color=(0.4, 0.4, 1.0, 1.0), size=3.0)  # light blue
+                
+                # Right wrist target axes (lighter/brighter colors for target)
+                r_x_w = quat_apply(r_quat_w, x_axis) * axis_len
+                r_y_w = quat_apply(r_quat_w, y_axis) * axis_len
+                r_z_w = quat_apply(r_quat_w, z_axis) * axis_len
+                self.env.debug_draw.vector(r_target_w, r_x_w, color=(1.0, 0.4, 0.4, 1.0), size=3.0)  # light red
+                self.env.debug_draw.vector(r_target_w, r_y_w, color=(0.4, 1.0, 0.4, 1.0), size=3.0)  # light green
+                self.env.debug_draw.vector(r_target_w, r_z_w, color=(0.4, 0.4, 1.0, 1.0), size=3.0)  # light blue
+        
+        # —— Current robot EE (wrist) positions visualization ——
+        wrist_names = ["left_hand_mimic", "right_hand_mimic"]
+        try:
+            wrist_idx_asset = [self.asset.body_names.index(n) for n in wrist_names]
+            # Get current wrist positions in world frame
+            l_current_w = self.asset.data.body_pos_w[:, wrist_idx_asset[0], :]  # [N, 3]
+            r_current_w = self.asset.data.body_pos_w[:, wrist_idx_asset[1], :]  # [N, 3]
+            # Get current wrist quaternions in world frame
+            l_current_quat_w = self.asset.data.body_quat_w[:, wrist_idx_asset[0], :]  # [N, 4]
+            r_current_quat_w = self.asset.data.body_quat_w[:, wrist_idx_asset[1], :]  # [N, 4]
+            
+            # magenta points for current left wrist (all envs)
+            self.env.debug_draw.point(
+                l_current_w, color=(1, 0, 1, 1), size=10.0
+            )
+            # magenta points for current right wrist (all envs)
+            self.env.debug_draw.point(
+                r_current_w, color=(1, 0, 1, 1), size=10.0
+            )
+            
+            # —— Current orientation visualization (coordinate axes, darker colors) ——
+            axis_len_cur = 0.06  # slightly shorter than target
+            x_axis = torch.tensor([1.0, 0.0, 0.0], device=self.device).expand(self.num_envs, -1)
+            y_axis = torch.tensor([0.0, 1.0, 0.0], device=self.device).expand(self.num_envs, -1)
+            z_axis = torch.tensor([0.0, 0.0, 1.0], device=self.device).expand(self.num_envs, -1)
+            
+            # Left wrist current axes (darker colors for current)
+            l_cur_x = quat_apply(l_current_quat_w, x_axis) * axis_len_cur
+            l_cur_y = quat_apply(l_current_quat_w, y_axis) * axis_len_cur
+            l_cur_z = quat_apply(l_current_quat_w, z_axis) * axis_len_cur
+            self.env.debug_draw.vector(l_current_w, l_cur_x, color=(0.7, 0.0, 0.0, 1.0), size=2.0)  # dark red
+            self.env.debug_draw.vector(l_current_w, l_cur_y, color=(0.0, 0.7, 0.0, 1.0), size=2.0)  # dark green
+            self.env.debug_draw.vector(l_current_w, l_cur_z, color=(0.0, 0.0, 0.7, 1.0), size=2.0)  # dark blue
+            
+            # Right wrist current axes (darker colors for current)
+            r_cur_x = quat_apply(r_current_quat_w, x_axis) * axis_len_cur
+            r_cur_y = quat_apply(r_current_quat_w, y_axis) * axis_len_cur
+            r_cur_z = quat_apply(r_current_quat_w, z_axis) * axis_len_cur
+            self.env.debug_draw.vector(r_current_w, r_cur_x, color=(0.7, 0.0, 0.0, 1.0), size=2.0)  # dark red
+            self.env.debug_draw.vector(r_current_w, r_cur_y, color=(0.0, 0.7, 0.0, 1.0), size=2.0)  # dark green
+            self.env.debug_draw.vector(r_current_w, r_cur_z, color=(0.0, 0.0, 0.7, 1.0), size=2.0)  # dark blue
+            
+            # Draw error vectors from current to target (if teleop target exists)
+            if hasattr(self, "_teleop") and self._teleop is not None and seq >= 0:
+                # white lines showing error from current to target
+                self.env.debug_draw.vector(
+                    l_current_w, l_target_w - l_current_w, color=(1, 1, 1, 0.5), size=2.0
+                )
+                self.env.debug_draw.vector(
+                    r_current_w, r_target_w - r_current_w, color=(1, 1, 1, 0.5), size=2.0
+                )
+        except ValueError:
+            pass  # wrist body names not found
 
 from .utils import TemporalLerp, clamp_norm, create_mapping, rand_points_disk, rand_points_isotropic, random_uniform
 import os
@@ -1556,21 +1643,21 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         pos_flat   = pos.reshape(-1, 3)
         force_flat = force.reshape(-1, 3)
 
-        self.env.debug_draw.vector(
-            pos_flat, force_flat * 0.2,
-            color=(0.0, 0.0, 1.0, 1.0)
-        )
+        # self.env.debug_draw.vector(
+        #     pos_flat, force_flat * 0.2,
+        #     color=(0.0, 0.0, 1.0, 1.0)
+        # )
 
-        act1 = self.asset.data.body_pos_w[:, self.force_apply_idx_asset, :].reshape(-1, 3)
-        tar1 = self.force_keypoint_w.reshape(-1, 3)
-        self.env.debug_draw.vector(
-            act1,
-            (tar1 - act1).reshape(-1, 3),
-            color=(1, 0, 1, 1)
-        )
-        self.env.debug_draw.point(
-            tar1.reshape(-1, 3), color=(1, 0, 1, 1), size=10.0
-        )
-        self.env.debug_draw.point(
-            act1.reshape(-1, 3), color=(0, 0, 1, 1), size=10.0
-        )
+        # act1 = self.asset.data.body_pos_w[:, self.force_apply_idx_asset, :].reshape(-1, 3)
+        # tar1 = self.force_keypoint_w.reshape(-1, 3)
+        # self.env.debug_draw.vector(
+        #     act1,
+        #     (tar1 - act1).reshape(-1, 3),
+        #     color=(1, 0, 1, 1)
+        # )
+        # self.env.debug_draw.point(
+        #     tar1.reshape(-1, 3), color=(1, 0, 1, 1), size=10.0
+        # )
+        # self.env.debug_draw.point(
+        #     act1.reshape(-1, 3), color=(0, 0, 1, 1), size=10.0
+        # )
