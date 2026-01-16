@@ -1,0 +1,35 @@
+name: G1GENTLE_MANIPULATION
+
+defaults:
+  - G1_gentle
+  - _self_
+
+# 操作任务特定配置
+task_name: "G1_gentle_manipulation"
+
+# 使用遥操作命令系统（VR 输入）
+command:
+  _target_: active_adaptation.envs.mdp.commands.teleoperation.TeleopCommand
+  bind_port: 15000
+
+# 可选：修改奖励配置
+# reward:
+#   manipulation:
+#     grasping: {weight: 1.0}
+#     object_tracking: {weight: 2.0}NIPULATION
+
+defaults:
+  - G1_gentle
+  - _self_
+
+# 操作任务特定配置
+task_name: "G1_gentle_manipulation"
+
+# 可以在这里添加操作相关的配置
+# 如果需要修改奖励、观测等，在这里覆盖
+
+# 示例：如果需要禁用某些奖励或添加新的奖励
+# reward:
+#   manipulation:
+#     grasping: {weight: 1.0}
+#     object_tracking: {weight: 2.0}

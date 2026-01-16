@@ -377,7 +377,9 @@ class MotionTrackingCommand(Command):
         )
         # no move test
         target_pos_b = torch.zeros(self.num_envs, len(self.future_steps), 3, device=self.device)
+        
         return target_pos_b.reshape(self.num_envs, -1)
+
     def target_pos_b_obs_sym(self):
         return sym_utils.SymmetryTransform(
             perm=torch.arange(3),
@@ -517,10 +519,6 @@ class MotionTrackingCommand(Command):
 
         wrist_axis_ang = axis_angle_from_quat(wrist_rot)  # [N, 2, 3]
 
-        # TEST: zero root command to see if robot stands still
-        # root_pos_w = torch.zeros(self.num_envs, 3, device=self.device)
-        # root_axis_ang = torch.zeros(self.num_envs, 3, device=self.device)
-
         # Pack: left_pos(3), right_pos(3), left_aa(3), right_aa(3) = 12 dims
         out = torch.cat([
             wrist_pos.reshape(self.num_envs, -1),        # [N, 6]
@@ -606,49 +604,49 @@ class MotionTrackingCommand(Command):
         out = torch.cat([pos_sel.reshape(self.num_envs, -1), axis_ang.reshape(self.num_envs, -1)], dim=-1)
         return out
     
-    @observation
-    def root_and_wrist_6d(self):
-        """
-        Teleoperation observation from UDP socket (wrist only, in ROOT frame).
-        Output: [N, 12]
-        Order:
-        left_pos(3), right_pos(3),
-        left_axis_angle(3), right_axis_angle(3)
-        All in ROOT frame.
-        """
-        if not hasattr(self, "_teleop") or self._teleop is None:
-            return torch.zeros(self.num_envs, 12, device=self.device)
+    # @observation
+    # def root_and_wrist_6d(self):
+    #     """
+    #     Teleoperation observation from UDP socket (wrist only, in ROOT frame).
+    #     Output: [N, 12]
+    #     Order:
+    #     left_pos(3), right_pos(3),
+    #     left_axis_angle(3), right_axis_angle(3)
+    #     All in ROOT frame.
+    #     """
+    #     if not hasattr(self, "_teleop") or self._teleop is None:
+    #         return torch.zeros(self.num_envs, 12, device=self.device)
 
-        seq, t_recv, \
-            root_pos_unused, root_quat_unused, \
-            head_pos_b, head_quat_b, \
-            l_pos_b, l_quat_b, \
-            r_pos_b, r_quat_b = self._teleop.get_latest()
+    #     seq, t_recv, \
+    #         root_pos_unused, root_quat_unused, \
+    #         head_pos_b, head_quat_b, \
+    #         l_pos_b, l_quat_b, \
+    #         r_pos_b, r_quat_b = self._teleop.get_latest()
 
-        if seq < 0:
-            return torch.zeros(self.num_envs, 12, device=self.device)
+    #     if seq < 0:
+    #         return torch.zeros(self.num_envs, 12, device=self.device)
 
-        # ---- pack positions (already root frame) ----
-        pos_sel_b = torch.stack([l_pos_b, r_pos_b], dim=0).to(self.device)   # [2, 3]
-        pos_sel_b = pos_sel_b.unsqueeze(0).expand(self.num_envs, -1, -1)     # [N, 2, 3]
+    #     # ---- pack positions (already root frame) ----
+    #     pos_sel_b = torch.stack([l_pos_b, r_pos_b], dim=0).to(self.device)   # [2, 3]
+    #     pos_sel_b = pos_sel_b.unsqueeze(0).expand(self.num_envs, -1, -1)     # [N, 2, 3]
 
-        # ---- pack orientations (already root-relative) ----
-        quat_sel_b = torch.stack([l_quat_b, r_quat_b], dim=0).to(self.device)  # [2, 4]
-        # optional safety normalize
-        quat_sel_b = quat_sel_b / (torch.norm(quat_sel_b, dim=-1, keepdim=True) + 1e-8)
-        quat_sel_b = quat_sel_b.unsqueeze(0).expand(self.num_envs, -1, -1)     # [N, 2, 4]
+    #     # ---- pack orientations (already root-relative) ----
+    #     quat_sel_b = torch.stack([l_quat_b, r_quat_b], dim=0).to(self.device)  # [2, 4]
+    #     # optional safety normalize
+    #     quat_sel_b = quat_sel_b / (torch.norm(quat_sel_b, dim=-1, keepdim=True) + 1e-8)
+    #     quat_sel_b = quat_sel_b.unsqueeze(0).expand(self.num_envs, -1, -1)     # [N, 2, 4]
 
-        axis_ang_b = axis_angle_from_quat(quat_sel_b)                          # [N, 2, 3]
+    #     axis_ang_b = axis_angle_from_quat(quat_sel_b)                          # [N, 2, 3]
 
-        out = torch.cat(
-            [pos_sel_b.reshape(self.num_envs, -1),   # [N, 6]
-             axis_ang_b.reshape(self.num_envs, -1)], # [N, 6]
-            dim=-1
-        )  # [N, 12]
+    #     out = torch.cat(
+    #         [pos_sel_b.reshape(self.num_envs, -1),   # [N, 6]
+    #          axis_ang_b.reshape(self.num_envs, -1)], # [N, 6]
+    #         dim=-1
+    #     )  # [N, 12]
 
-        # debug
-        print(f"[DEBUG] seq={seq} out0={out[0].detach().cpu().tolist()}", flush=True)
-        return out
+    #     # debug
+    #     print(f"[DEBUG] seq={seq} out0={out[0].detach().cpu().tolist()}", flush=True)
+    #     return out
 
     def head_and_wrist_6d_sym(self):
         # build symmetry for the three selected bodies (head, left hand, right hand)

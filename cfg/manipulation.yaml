@@ -1,0 +1,21 @@
+# 操作任务推理配置
+defaults:
+  - eval
+  - _self_
+
+# 任务配置
+task: G1/G1_gentle_manipulation
+
+# 模型检查点目录
+checkpoint_dir: "outputs"
+
+# 是否使用 VecNorm（观测归一化）
+vecnorm: "eval"
+
+# 运行相关参数
+num_envs: 1
+headless: false
+
+# 可视化参数
+enable_viewer: true
+debug_mode: false
