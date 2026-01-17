@@ -67,6 +67,11 @@ class SimpleEnv(_Env):
 
             ### add task related objects
             flags = self.cfg.flags or []
+            
+            # Add objects from config (manipulation tasks)
+            if hasattr(self.cfg, "objects") and self.cfg.objects:
+                from active_adaptation.envs.objects import add_objects_to_scene
+                add_objects_to_scene(scene_cfg, list(self.cfg.objects))
 
             sim_cfg = sim_utils.SimulationCfg(
                 dt=self.cfg.sim.isaac_physics_dt,

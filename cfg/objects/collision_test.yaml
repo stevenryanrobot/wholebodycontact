@@ -1,0 +1,29 @@
+# Collision test scene - dynamic box that can be pushed
+# If this box can be pushed by the robot, collision detection works
+# If it can't, there's a fundamental issue with robot collision
+
+objects:
+  # Dynamic box directly in front of robot
+  - type: box
+    name: test_box
+    pos: [0.6, 0.0, 0.2]  # In front of robot at low height
+    size: [0.15, 0.15, 0.15]
+    color: [1.0, 0.0, 0.0]  # Bright red
+    mass: 0.5  # Light box
+    static: false
+
+  # Another dynamic box at hand level
+  - type: box
+    name: hand_box
+    pos: [0.5, 0.3, 0.8]  # Near right hand
+    size: [0.1, 0.1, 0.1]
+    color: [0.0, 1.0, 0.0]  # Bright green
+    mass: 0.3
+    static: false
+
+  # Static wall for reference
+  - type: wall
+    name: test_wall
+    pos: [1.0, 0.0, 0.5]
+    size: [0.05, 1.0, 1.0]
+    color: [0.5, 0.5, 0.8]
