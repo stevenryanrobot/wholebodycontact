@@ -661,49 +661,49 @@ class MotionTrackingCommand(Command):
         out = torch.cat([pos_sel.reshape(self.num_envs, -1), axis_ang.reshape(self.num_envs, -1)], dim=-1)
         return out
     
-    @observation
-    def root_and_wrist_6d(self):
-        """
-        Teleoperation observation from UDP socket (wrist only, in ROOT frame).
-        Output: [N, 12]
-        Order:
-        left_pos(3), right_pos(3),
-        left_axis_angle(3), right_axis_angle(3)
-        All in ROOT frame.
-        """
-        if not hasattr(self, "_teleop") or self._teleop is None:
-            return torch.zeros(self.num_envs, 12, device=self.device)
+    # @observation
+    # def root_and_wrist_6d(self):
+    #     """
+    #     Teleoperation observation from UDP socket (wrist only, in ROOT frame).
+    #     Output: [N, 12]
+    #     Order:
+    #     left_pos(3), right_pos(3),
+    #     left_axis_angle(3), right_axis_angle(3)
+    #     All in ROOT frame.
+    #     """
+    #     if not hasattr(self, "_teleop") or self._teleop is None:
+    #         return torch.zeros(self.num_envs, 12, device=self.device)
 
-        seq, t_recv, \
-            root_pos_unused, root_quat_unused, \
-            head_pos_b, head_quat_b, \
-            l_pos_b, l_quat_b, \
-            r_pos_b, r_quat_b = self._teleop.get_latest()
+    #     seq, t_recv, \
+    #         root_pos_unused, root_quat_unused, \
+    #         head_pos_b, head_quat_b, \
+    #         l_pos_b, l_quat_b, \
+    #         r_pos_b, r_quat_b = self._teleop.get_latest()
 
-        if seq < 0:
-            return torch.zeros(self.num_envs, 12, device=self.device)
+    #     if seq < 0:
+    #         return torch.zeros(self.num_envs, 12, device=self.device)
 
-        # ---- pack positions (already root frame) ----
-        pos_sel_b = torch.stack([l_pos_b, r_pos_b], dim=0).to(self.device)   # [2, 3]
-        pos_sel_b = pos_sel_b.unsqueeze(0).expand(self.num_envs, -1, -1)     # [N, 2, 3]
+    #     # ---- pack positions (already root frame) ----
+    #     pos_sel_b = torch.stack([l_pos_b, r_pos_b], dim=0).to(self.device)   # [2, 3]
+    #     pos_sel_b = pos_sel_b.unsqueeze(0).expand(self.num_envs, -1, -1)     # [N, 2, 3]
 
-        # ---- pack orientations (already root-relative) ----
-        quat_sel_b = torch.stack([l_quat_b, r_quat_b], dim=0).to(self.device)  # [2, 4]
-        # optional safety normalize
-        quat_sel_b = quat_sel_b / (torch.norm(quat_sel_b, dim=-1, keepdim=True) + 1e-8)
-        quat_sel_b = quat_sel_b.unsqueeze(0).expand(self.num_envs, -1, -1)     # [N, 2, 4]
+    #     # ---- pack orientations (already root-relative) ----
+    #     quat_sel_b = torch.stack([l_quat_b, r_quat_b], dim=0).to(self.device)  # [2, 4]
+    #     # optional safety normalize
+    #     quat_sel_b = quat_sel_b / (torch.norm(quat_sel_b, dim=-1, keepdim=True) + 1e-8)
+    #     quat_sel_b = quat_sel_b.unsqueeze(0).expand(self.num_envs, -1, -1)     # [N, 2, 4]
 
-        axis_ang_b = axis_angle_from_quat(quat_sel_b)                          # [N, 2, 3]
+    #     axis_ang_b = axis_angle_from_quat(quat_sel_b)                          # [N, 2, 3]
 
-        out = torch.cat(
-            [pos_sel_b.reshape(self.num_envs, -1),   # [N, 6]
-             axis_ang_b.reshape(self.num_envs, -1)], # [N, 6]
-            dim=-1
-        )  # [N, 12]
+    #     out = torch.cat(
+    #         [pos_sel_b.reshape(self.num_envs, -1),   # [N, 6]
+    #          axis_ang_b.reshape(self.num_envs, -1)], # [N, 6]
+    #         dim=-1
+    #     )  # [N, 12]
 
-        # debug
-        print(f"[DEBUG] seq={seq} out0={out[0].detach().cpu().tolist()}", flush=True)
-        return out
+    #     # debug
+    #     # print(f"[DEBUG] seq={seq} out0={out[0].detach().cpu().tolist()}", flush=True)
+    #     return out
 
     def head_and_wrist_6d_sym(self):
         # build symmetry for the three selected bodies (head, left hand, right hand)
@@ -1634,29 +1634,29 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
             self.force_type_probs[1:5] = force_prob
             self.force_type_probs[0] = 1.0 - force_prob * 4
 
-    @observation
-    def command(self):
-        # here we use root pos instead of student body pos
-        root_yaw_quat = yaw_quat(self._motion.root_quat_w[:, 0, :]).unsqueeze(1)
-        root_yaw_future = yaw_quat(self._motion.root_quat_w[:, 1:, :])
-        root_pos = self._motion.root_pos_w[:, 0, :].unsqueeze(1)
-        root_pos_future = self._motion.root_pos_w[:, 1:, :]
+    # @observation
+    # def command(self):
+    #     # here we use root pos instead of student body pos
+    #     root_yaw_quat = yaw_quat(self._motion.root_quat_w[:, 0, :]).unsqueeze(1)
+    #     root_yaw_future = yaw_quat(self._motion.root_quat_w[:, 1:, :])
+    #     root_pos = self._motion.root_pos_w[:, 0, :].unsqueeze(1)
+    #     root_pos_future = self._motion.root_pos_w[:, 1:, :]
 
-        pos_diff_b = quat_apply_inverse(
-            root_yaw_quat,
-            root_pos_future - root_pos
-        )
+    #     pos_diff_b = quat_apply_inverse(
+    #         root_yaw_quat,
+    #         root_pos_future - root_pos
+    #     )
 
-        heading = torch.tensor([1.0, 0.0, 0.0], device=self.device, dtype=torch.float32).reshape(1, 1, 3)
-        target_heading = quat_apply(root_yaw_future, heading)
-        target_heading_b = quat_apply_inverse(root_yaw_quat, target_heading)
+    #     heading = torch.tensor([1.0, 0.0, 0.0], device=self.device, dtype=torch.float32).reshape(1, 1, 3)
+    #     target_heading = quat_apply(root_yaw_future, heading)
+    #     target_heading_b = quat_apply_inverse(root_yaw_quat, target_heading)
 
-        return torch.cat([
-            self._motion.root_pos_w[:, :, 2].reshape(self.num_envs, -1),
-            pos_diff_b[:, :, :2].reshape(self.num_envs, -1),
-            target_heading_b[:, :, :2].reshape(self.num_envs, -1),
-            self.force_safe_limit_tl.current
-        ], dim=-1)
+    #     return torch.cat([
+    #         self._motion.root_pos_w[:, :, 2].reshape(self.num_envs, -1),
+    #         pos_diff_b[:, :, :2].reshape(self.num_envs, -1),
+    #         target_heading_b[:, :, :2].reshape(self.num_envs, -1),
+    #         self.force_safe_limit_tl.current
+    #     ], dim=-1)
 
     def command_sym(self):
         return sym_utils.SymmetryTransform.cat([
@@ -1669,71 +1669,100 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
     # @observation
     # def command(self):
     #     """
-    #     UDP-controlled command observation.
-    #     Same format as command() but uses UDP teleop signals instead of motion data.
+    #     Fixed command observation for teleop mode.
         
-    #     Output format (same as command):
-    #     - root_height: [N, S] - target root height (fixed at current height)
-    #     - pos_diff_b: [N, (S-1)*2] - xy position offset in body frame
-    #     - target_heading_b: [N, (S-1)*2] - target heading direction in body frame
-    #     - force_safe_limit: [N, 1] - force limit
+    #     Output format (same as original command):
+    #     - root_height: [N, S] - fixed at 0.79m
+    #     - pos_diff_b: [N, (S-1)*2] - all zeros (stay in place)
+    #     - target_heading_b: [N, (S-1)*2] - [1, 0] for each step (face forward)
+    #     - force_safe_limit: [N, 1] - fixed at 10.0
     #     """
-    #     num_future = len(self.future_steps) - 1  # number of future steps (excluding current)
+    #     num_future = len(self.future_steps) - 1  # S-1
         
-    #     # Default: all zeros (stand still, face forward)
-    #     root_height = torch.full((self.num_envs, len(self.future_steps)), 0.75, device=self.device)  # default standing height
-    #     pos_diff_b = torch.zeros(self.num_envs, num_future, 2, device=self.device)
-    #     target_heading_b = torch.zeros(self.num_envs, num_future, 2, device=self.device)
-    #     target_heading_b[:, :, 0] = 1.0  # default: face forward (x direction)
+    #     # Fixed root height = 0.79m for all future steps
+    #     root_height = torch.full((self.num_envs, len(self.future_steps)), 0.76, device=self.device)  # [N, S]
         
-    #     # Get UDP teleop data
-    #     if hasattr(self, "_teleop") and self._teleop is not None:
-    #         seq, t_recv, \
-    #             root_pos_cmd, root_quat_cmd, \
-    #             head_pos_b, head_quat_b, \
-    #             l_pos_b, l_quat_b, \
-    #             r_pos_b, r_quat_b = self._teleop.get_latest()
-            
-    #         if seq >= 0:
-    #             # Use current robot's yaw for transformation
-    #             robot_yaw_quat = yaw_quat(self.asset.data.root_quat_w)  # [N, 4]
-                
-    #             # ---- Position offset (xy) ----
-    #             # root_pos_cmd contains target xy offset in world frame
-    #             pos_cmd_xy_w = root_pos_cmd[:2].to(self.device)  # [2]
-    #             # Convert to body frame
-    #             pos_cmd_xyz_w = torch.cat([pos_cmd_xy_w, torch.zeros(1, device=self.device)])  # [3]
-    #             pos_cmd_xyz_w = pos_cmd_xyz_w.unsqueeze(0).expand(self.num_envs, -1)  # [N, 3]
-    #             pos_cmd_b = quat_apply_inverse(robot_yaw_quat, pos_cmd_xyz_w)  # [N, 3]
-                
-    #             # Fill all future steps with the same command
-    #             pos_diff_b[:, :, 0] = pos_cmd_b[:, 0:1].expand(-1, num_future)  # x
-    #             pos_diff_b[:, :, 1] = pos_cmd_b[:, 1:2].expand(-1, num_future)  # y
-                
-    #             # ---- Target heading ----
-    #             # root_quat_cmd contains target orientation
-    #             root_quat_cmd = root_quat_cmd.to(self.device)
-    #             root_quat_cmd = root_quat_cmd / (torch.norm(root_quat_cmd) + 1e-8)
-    #             target_yaw_quat = yaw_quat(root_quat_cmd.unsqueeze(0))  # [1, 4]
-                
-    #             # Compute heading direction in world frame
-    #             heading_w = torch.tensor([1.0, 0.0, 0.0], device=self.device)
-    #             target_heading_w = quat_apply(target_yaw_quat, heading_w.unsqueeze(0))  # [1, 3]
-    #             target_heading_w = target_heading_w.expand(self.num_envs, -1)  # [N, 3]
-                
-    #             # Convert to body frame
-    #             target_heading_b_full = quat_apply_inverse(robot_yaw_quat, target_heading_w)  # [N, 3]
-                
-    #             # Fill all future steps
-    #             target_heading_b[:, :, 0] = target_heading_b_full[:, 0:1].expand(-1, num_future)
-    #             target_heading_b[:, :, 1] = target_heading_b_full[:, 1:2].expand(-1, num_future)
+    #     # Position difference = 0 (stay in place)
+    #     pos_diff_b = torch.zeros(self.num_envs, num_future, 2, device=self.device)  # [N, S-1, 2]
         
-    #     return torch.cat([
+    #     # Target heading = [1, 0] (face forward, no rotation)
+    #     target_heading_b = torch.zeros(self.num_envs, num_future, 2, device=self.device)  # [N, S-1, 2]
+    #     target_heading_b[:, :, 0] = 1.0  # x = 1, y = 0
+        
+    #     # Fixed force limit = 10.0
+    #     fixed_force_limit = torch.full((self.num_envs, 1), 10.0, device=self.device)
+        
+    #     out = torch.cat([
     #         root_height.reshape(self.num_envs, -1),
     #         pos_diff_b.reshape(self.num_envs, -1),
     #         target_heading_b.reshape(self.num_envs, -1),
-    #         self.force_safe_limit_tl.current
+    #         fixed_force_limit
     #     ], dim=-1)
+        
+    #     # Debug print (occasional)
+    #     if hasattr(self, "_command_print_counter"):
+    #         self._command_print_counter += 1
+    #     else:
+    #         self._command_print_counter = 0
+        
+    #     if self._command_print_counter % 100 == 0:
+    #         print(f"[command] shape={out.shape}, "
+    #               f"root_height=0.79 (fixed), "
+    #               f"pos_diff_b=0 (fixed), "
+    #               f"target_heading_b=[1,0] (fixed), "
+    #               f"force_limit=10.0 (fixed)", flush=True)
+        
+    #     return out
+
+    @observation
+    def command(self):
+        """
+        Simplified command observation for velocity tracking + EE reaching tasks.
+        Only provides next frame target (future step 1), not full trajectory.
+        
+        Output format:
+        - root_height: [N, 1] - current frame root height
+        - target_linvel_b: [N, 2] - target xy linear velocity in body frame
+        - target_heading_b: [N, 2] - target heading direction in body frame
+        - force_safe_limit: [N, 1] - force limit
+        
+        Total: 6 dimensions
+        """
+        # Get motion data for current and next frame
+        # self._motion contains [N, S, ...] where S = len(future_steps)
+        # future_steps = [0, 2, 4, 8, 16], so index 1 is 2 steps ahead
+        
+        # ---- Root height (current frame) ----
+        root_height = self._motion.root_pos_w[:, 0, 2:3]  # [N, 1]
+        
+        # ---- Target linear velocity in body frame ----
+        # Use motion's root_lin_vel_w for next frame, convert to body frame
+        current_quat = self.asset.data.root_quat_w  # [N, 4]
+        target_linvel_w = self._motion.root_lin_vel_w[:, 0]  # [N, 3] - current frame velocity
+        target_linvel_b = quat_apply_inverse(current_quat, target_linvel_w)  # [N, 3]
+        target_linvel_b_xy = target_linvel_b[:, :2]  # [N, 2] - only xy
+        
+        # ---- Target heading in body frame ----
+        # Compute heading direction from motion's root orientation
+        root_yaw_quat_current = yaw_quat(current_quat)  # [N, 4]
+        root_yaw_quat_target = yaw_quat(self._motion.root_quat_w[:, 0])  # [N, 4] - current frame target
+        
+        heading = torch.tensor([1.0, 0.0, 0.0], device=self.device, dtype=torch.float32)
+        target_heading_w = quat_apply(root_yaw_quat_target, heading.unsqueeze(0).expand(self.num_envs, -1))  # [N, 3]
+        target_heading_b = quat_apply_inverse(root_yaw_quat_current, target_heading_w)  # [N, 3]
+        target_heading_b_xy = target_heading_b[:, :2]  # [N, 2]
+        
+        # ---- Force safe limit ----
+        force_limit = self.force_safe_limit_tl.current  # [N, 1]
+        
+        out = torch.cat([
+            root_height,           # [N, 1]
+            target_linvel_b_xy,    # [N, 2]
+            target_heading_b_xy,   # [N, 2]
+            force_limit            # [N, 1]
+        ], dim=-1)  # [N, 6]
+        
+        return out
 
 
     @observation

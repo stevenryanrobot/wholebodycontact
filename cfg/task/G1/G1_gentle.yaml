@@ -83,7 +83,7 @@ observation:
     root_ang_vel_history:      {history_steps: [0], noise_std: 0.05}
     projected_gravity_history: {history_steps: [0], noise_std: 0.01}
 
-    joint_pos_history:         {history_steps: [0, 1, 2], noise_std: 0.005} # [0, 1, 2, 3, 4, 8]
+    joint_pos_history:         {history_steps: [0, 1, 2, 3, 4, 8], noise_std: 0.005} # [0, 1, 2, 3, 4, 8]
     prev_actions:   {steps: 3}
   joint_target:
     # Teacher-only: direct joint target input (not compressed through encoder)
