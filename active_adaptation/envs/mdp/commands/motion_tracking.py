@@ -569,10 +569,10 @@ class MotionTrackingCommand(Command):
         wrist_rot = rot_step[:, wrist_idx, :]   # [N, 2, 4]
 
         # fixed ee pos and rot test - left and right hands with symmetric y
-        left_wrist_pos = torch.tensor([0.15, 0.1, 0.0], device=self.device, dtype=torch.float32)
-        right_wrist_pos = torch.tensor([0.15, -0.1, 0.0], device=self.device, dtype=torch.float32)
-        wrist_pos = torch.stack([left_wrist_pos, right_wrist_pos]).unsqueeze(0).expand(self.num_envs, -1, -1)
-        wrist_rot = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device, dtype=torch.float32).reshape(1, 1, 4).expand(self.num_envs, 2, -1)
+        # left_wrist_pos = torch.tensor([0.15, 0.1, 0.0], device=self.device, dtype=torch.float32)
+        # right_wrist_pos = torch.tensor([0.15, -0.1, 0.0], device=self.device, dtype=torch.float32)
+        # wrist_pos = torch.stack([left_wrist_pos, right_wrist_pos]).unsqueeze(0).expand(self.num_envs, -1, -1)
+        # wrist_rot = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device, dtype=torch.float32).reshape(1, 1, 4).expand(self.num_envs, 2, -1)
 
         wrist_axis_ang = axis_angle_from_quat(wrist_rot)  # [N, 2, 3]
 
@@ -1659,60 +1659,13 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
     #     ], dim=-1)
 
     def command_sym(self):
+        # command = [root_height (1), target_linvel_b_xy (2), target_heading_b_xy (2), force_limit (1)] = 6 dims
         return sym_utils.SymmetryTransform.cat([
-            sym_utils.SymmetryTransform(perm=torch.arange(1), signs=[1]).repeat(len(self.future_steps)),
-            sym_utils.SymmetryTransform(perm=torch.arange(2), signs=[1, -1]).repeat(len(self.future_steps) - 1),
-            sym_utils.SymmetryTransform(perm=torch.arange(2), signs=[1, -1]).repeat(len(self.future_steps) - 1),
-            sym_utils.SymmetryTransform(perm=torch.arange(1), signs=[1]),
+            sym_utils.SymmetryTransform(perm=torch.arange(1), signs=[1]),        # root_height: no change
+            sym_utils.SymmetryTransform(perm=torch.arange(2), signs=[1, -1]),   # target_linvel_b_xy: flip y
+            sym_utils.SymmetryTransform(perm=torch.arange(2), signs=[1, -1]),   # target_heading_b_xy: flip y
+            sym_utils.SymmetryTransform(perm=torch.arange(1), signs=[1]),        # force_limit: no change
         ])
-
-    # @observation
-    # def command(self):
-    #     """
-    #     Fixed command observation for teleop mode.
-        
-    #     Output format (same as original command):
-    #     - root_height: [N, S] - fixed at 0.79m
-    #     - pos_diff_b: [N, (S-1)*2] - all zeros (stay in place)
-    #     - target_heading_b: [N, (S-1)*2] - [1, 0] for each step (face forward)
-    #     - force_safe_limit: [N, 1] - fixed at 10.0
-    #     """
-    #     num_future = len(self.future_steps) - 1  # S-1
-        
-    #     # Fixed root height = 0.79m for all future steps
-    #     root_height = torch.full((self.num_envs, len(self.future_steps)), 0.76, device=self.device)  # [N, S]
-        
-    #     # Position difference = 0 (stay in place)
-    #     pos_diff_b = torch.zeros(self.num_envs, num_future, 2, device=self.device)  # [N, S-1, 2]
-        
-    #     # Target heading = [1, 0] (face forward, no rotation)
-    #     target_heading_b = torch.zeros(self.num_envs, num_future, 2, device=self.device)  # [N, S-1, 2]
-    #     target_heading_b[:, :, 0] = 1.0  # x = 1, y = 0
-        
-    #     # Fixed force limit = 10.0
-    #     fixed_force_limit = torch.full((self.num_envs, 1), 10.0, device=self.device)
-        
-    #     out = torch.cat([
-    #         root_height.reshape(self.num_envs, -1),
-    #         pos_diff_b.reshape(self.num_envs, -1),
-    #         target_heading_b.reshape(self.num_envs, -1),
-    #         fixed_force_limit
-    #     ], dim=-1)
-        
-    #     # Debug print (occasional)
-    #     if hasattr(self, "_command_print_counter"):
-    #         self._command_print_counter += 1
-    #     else:
-    #         self._command_print_counter = 0
-        
-    #     if self._command_print_counter % 100 == 0:
-    #         print(f"[command] shape={out.shape}, "
-    #               f"root_height=0.79 (fixed), "
-    #               f"pos_diff_b=0 (fixed), "
-    #               f"target_heading_b=[1,0] (fixed), "
-    #               f"force_limit=10.0 (fixed)", flush=True)
-        
-    #     return out
 
     @observation
     def command(self):
@@ -1764,6 +1717,41 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         
         return out
 
+    # @observation
+    # def command(self):
+    #     """
+    #     Simplified command observation for teleop mode.
+    #     Only provides next frame target (same as training command).
+        
+    #     Output format (6 dimensions, matches training):
+    #     - root_height: [N, 1] - current frame root height
+    #     - target_linvel_b: [N, 2] - target xy linear velocity in body frame (zeros for teleop)
+    #     - target_heading_b: [N, 2] - target heading direction in body frame ([1, 0] = face forward)
+    #     - force_safe_limit: [N, 1] - force limit
+        
+    #     Total: 1 + 2 + 2 + 1 = 6 dimensions
+    #     """
+    #     # Get current root height
+    #     root_height = self._motion.root_pos_w[:, 0, 2:3]  # [N, 1]
+        
+    #     # Target linear velocity = 0 for teleop (motion comes from UDP input)
+    #     target_linvel_b_xy = torch.zeros(self.num_envs, 2, device=self.device)  # [N, 2]
+        
+    #     # Target heading = [1, 0] (face forward, no rotation)
+    #     target_heading_b_xy = torch.zeros(self.num_envs, 2, device=self.device)  # [N, 2]
+    #     target_heading_b_xy[:, 0] = 1.0  # x = 1, y = 0
+        
+    #     # Force safe limit
+    #     force_limit = self.force_safe_limit_tl.current  # [N, 1]
+        
+    #     out = torch.cat([
+    #         root_height,           # [N, 1]
+    #         target_linvel_b_xy,    # [N, 2]
+    #         target_heading_b_xy,   # [N, 2]
+    #         force_limit            # [N, 1]
+    #     ], dim=-1)  # [N, 6]
+        
+    #     return out
 
     @observation
     def force_priv(self):
