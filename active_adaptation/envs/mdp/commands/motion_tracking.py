@@ -34,6 +34,7 @@ import struct
 import threading
 import time
 from typing import Optional, Tuple
+import os
 
 MAGIC = b"G6D1"
 PACK_FMT = "<4sI" + "f" * 28  # magic + seq + 28 floats
@@ -170,6 +171,40 @@ def convert_dtype(dtype_str):
         return dtype_map[dtype_str]
     return dtype_str
 
+def quat_wxyz_to_rpy(q):
+    """
+    Convert a quaternion in (w, x, y, z) order to roll-pitch-yaw (r, p, y) in radians.
+    Accepts a list/tuple/np-array/torch tensor of length 4 and returns a tuple (r, p, y).
+    """
+    # avoid heavy deps here; work on Python floats
+    try:
+        # support torch tensors
+        import numpy as _np
+    except Exception:
+        _np = None
+
+    if hasattr(q, "tolist"):
+        q = q.tolist()
+
+    w, x, y, z = float(q[0]), float(q[1]), float(q[2]), float(q[3])
+
+    # roll (x-axis rotation)
+    t0 = +2.0 * (w * x + y * z)
+    t1 = +1.0 - 2.0 * (x * x + y * y)
+    roll = math.atan2(t0, t1)
+
+    # pitch (y-axis rotation)
+    t2 = +2.0 * (w * y - z * x)
+    t2 = max(-1.0, min(1.0, t2))
+    pitch = math.asin(t2)
+
+    # yaw (z-axis rotation)
+    t3 = +2.0 * (w * z + x * y)
+    t4 = +1.0 - 2.0 * (y * y + z * z)
+    yaw = math.atan2(t3, t4)
+
+    return (roll, pitch, yaw)
+
 class MotionTrackingCommand(Command):
     def __init__(self, env, dataset: dict,
                 dataset_extra_keys: list[dict] = [],
@@ -187,6 +222,13 @@ class MotionTrackingCommand(Command):
                 student_train: bool = False,
                 disable_motion_finish: bool = False,):
         super().__init__(env)
+        
+        # Lists for logging UDP target and actual EE position/pose
+        self.target_position_list = []
+        self.target_pose_list = []
+        self.actual_position_list = []
+        self.actual_pose_list = []
+        self._last_csv_save_time = time.time()
         
         self.disable_motion_finish = disable_motion_finish
         self.future_steps = torch.tensor([0, 2, 4, 8, 16], device=self.device)
@@ -252,6 +294,41 @@ class MotionTrackingCommand(Command):
 
         self._teleop = UdpTeleopReceiver(bind_port=15000) 
         self._teleop.start()
+
+        # Optional UDP broadcaster for root state (disabled by default).
+        # Enable by setting environment variable MOTION_TRACKING_UDP_BROADCAST to "host:port" (e.g. 127.0.0.1:15001)
+        self._udp_broadcast_enabled = False
+        self._udp_broadcast_addr = ("127.0.0.1", 15001)
+        self._udp_broadcast_sock = None
+        
+        try:
+            b_cfg = os.getenv("MOTION_TRACKING_UDP_BROADCAST", None)
+            print(f"[MOTION_TRACKING] UDP broadcaster config: {b_cfg}", flush=True)
+            if b_cfg:
+                parts = b_cfg.split(":")
+                host = parts[0]
+                port = int(parts[1]) if len(parts) > 1 else 15001
+                self._udp_broadcast_addr = (host, port)
+                self._udp_broadcast_enabled = True
+                # create non-blocking UDP socket
+                try:
+                    self._udp_broadcast_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    self._udp_broadcast_sock.setblocking(False)
+                    self._udp_broadcast_seq = 0
+                    print(f"[MOTION_TRACKING] UDP broadcaster enabled -> {self._udp_broadcast_addr}", flush=True)
+                    # Print debug send every N sends (option B). Configure via env var:
+                    # MOTION_TRACKING_UDP_BROADCAST_PRINT_EVERY (integer > 0). Default 10.
+                    try:
+                        _pe = os.getenv("MOTION_TRACKING_UDP_BROADCAST_PRINT_EVERY", "10")
+                        self._udp_broadcast_print_every = max(1, int(_pe))
+                    except Exception:
+                        self._udp_broadcast_print_every = 10
+                    print(f"[MOTION_TRACKING] UDP broadcaster debug: printing every {self._udp_broadcast_print_every} sends", flush=True)
+                except Exception:
+                    self._udp_broadcast_sock = None
+                    self._udp_broadcast_enabled = False
+        except Exception:
+            self._udp_broadcast_enabled = False
 
         # all joints except ankles
         self.ignore_joint_patterns = ignore_joint_patterns
@@ -583,6 +660,7 @@ class MotionTrackingCommand(Command):
         ], dim=-1)  # [N, 12]
         # print(f"root_and_wrist_6d output shape: {out.shape}", flush=True)
         # print(f"root_and_wrist_6d output sample: {out[0]}", flush=True)
+        
 
         return out
 
@@ -661,49 +739,49 @@ class MotionTrackingCommand(Command):
         out = torch.cat([pos_sel.reshape(self.num_envs, -1), axis_ang.reshape(self.num_envs, -1)], dim=-1)
         return out
     
-    # @observation
-    # def root_and_wrist_6d(self):
-    #     """
-    #     Teleoperation observation from UDP socket (wrist only, in ROOT frame).
-    #     Output: [N, 12]
-    #     Order:
-    #     left_pos(3), right_pos(3),
-    #     left_axis_angle(3), right_axis_angle(3)
-    #     All in ROOT frame.
-    #     """
-    #     if not hasattr(self, "_teleop") or self._teleop is None:
-    #         return torch.zeros(self.num_envs, 12, device=self.device)
+    @observation
+    def root_and_wrist_6d(self):
+        """
+        Teleoperation observation from UDP socket (wrist only, in ROOT frame).
+        Output: [N, 12]
+        Order:
+        left_pos(3), right_pos(3),
+        left_axis_angle(3), right_axis_angle(3)
+        All in ROOT frame.
+        """
+        if not hasattr(self, "_teleop") or self._teleop is None:
+            return torch.zeros(self.num_envs, 12, device=self.device)
 
-    #     seq, t_recv, \
-    #         root_pos_unused, root_quat_unused, \
-    #         head_pos_b, head_quat_b, \
-    #         l_pos_b, l_quat_b, \
-    #         r_pos_b, r_quat_b = self._teleop.get_latest()
+        seq, t_recv, \
+            root_pos_unused, root_quat_unused, \
+            head_pos_b, head_quat_b, \
+            l_pos_b, l_quat_b, \
+            r_pos_b, r_quat_b = self._teleop.get_latest()
 
-    #     if seq < 0:
-    #         return torch.zeros(self.num_envs, 12, device=self.device)
+        if seq < 0:
+            return torch.zeros(self.num_envs, 12, device=self.device)
 
-    #     # ---- pack positions (already root frame) ----
-    #     pos_sel_b = torch.stack([l_pos_b, r_pos_b], dim=0).to(self.device)   # [2, 3]
-    #     pos_sel_b = pos_sel_b.unsqueeze(0).expand(self.num_envs, -1, -1)     # [N, 2, 3]
+        # ---- pack positions (already root frame) ----
+        pos_sel_b = torch.stack([l_pos_b, r_pos_b], dim=0).to(self.device)   # [2, 3]
+        pos_sel_b = pos_sel_b.unsqueeze(0).expand(self.num_envs, -1, -1)     # [N, 2, 3]
 
-    #     # ---- pack orientations (already root-relative) ----
-    #     quat_sel_b = torch.stack([l_quat_b, r_quat_b], dim=0).to(self.device)  # [2, 4]
-    #     # optional safety normalize
-    #     quat_sel_b = quat_sel_b / (torch.norm(quat_sel_b, dim=-1, keepdim=True) + 1e-8)
-    #     quat_sel_b = quat_sel_b.unsqueeze(0).expand(self.num_envs, -1, -1)     # [N, 2, 4]
+        # ---- pack orientations (already root-relative) ----
+        quat_sel_b = torch.stack([l_quat_b, r_quat_b], dim=0).to(self.device)  # [2, 4]
+        # optional safety normalize
+        quat_sel_b = quat_sel_b / (torch.norm(quat_sel_b, dim=-1, keepdim=True) + 1e-8)
+        quat_sel_b = quat_sel_b.unsqueeze(0).expand(self.num_envs, -1, -1)     # [N, 2, 4]
 
-    #     axis_ang_b = axis_angle_from_quat(quat_sel_b)                          # [N, 2, 3]
+        axis_ang_b = axis_angle_from_quat(quat_sel_b)                          # [N, 2, 3]
 
-    #     out = torch.cat(
-    #         [pos_sel_b.reshape(self.num_envs, -1),   # [N, 6]
-    #          axis_ang_b.reshape(self.num_envs, -1)], # [N, 6]
-    #         dim=-1
-    #     )  # [N, 12]
+        out = torch.cat(
+            [pos_sel_b.reshape(self.num_envs, -1),   # [N, 6]
+             axis_ang_b.reshape(self.num_envs, -1)], # [N, 6]
+            dim=-1
+        )  # [N, 12]
 
-    #     # debug
-    #     # print(f"[DEBUG] seq={seq} out0={out[0].detach().cpu().tolist()}", flush=True)
-    #     return out
+        # debug
+        # print(f"[DEBUG] seq={seq} out0={out[0].detach().cpu().tolist()}", flush=True)
+        return out
 
     def head_and_wrist_6d_sym(self):
         # build symmetry for the three selected bodies (head, left hand, right hand)
@@ -919,6 +997,125 @@ class MotionTrackingCommand(Command):
         self.dataset.update()
         if self.last_reset_env_ids is not None:
             self.last_reset_env_ids = None
+        # Log UDP target and actual EE position/pose, save to CSV every 10s
+        try:
+            if hasattr(self, "_teleop") and self._teleop is not None:
+                seq, t_recv, root_pos_udp, root_quat_udp, head_pos_b, head_quat_b, l_pos_b, l_quat_b, r_pos_b, r_quat_b = self._teleop.get_latest()
+                # Only log if UDP data is valid
+                if seq >= 0:
+                    # Target EE position/pose (UDP, left/right hand)
+                    target_pos = torch.cat([l_pos_b, r_pos_b]).cpu().numpy().tolist()  # [6]
+                    target_pose = torch.cat([l_quat_b, r_quat_b]).cpu().numpy().tolist()  # [8]
+                    self.target_position_list.append(target_pos)
+                    self.target_pose_list.append(target_pose)
+                    # Actual EE position/pose (robot, left/right hand)
+                    wrist_names = ["left_hand_mimic", "right_hand_mimic"]
+                    try:
+                        wrist_idx_asset = [self.asset.body_names.index(n) for n in wrist_names]
+                        # world-frame per-env
+                        l_current_w = self.asset.data.body_pos_w[:, wrist_idx_asset[0], :]  # [N,3]
+                        r_current_w = self.asset.data.body_pos_w[:, wrist_idx_asset[1], :]  # [N,3]
+                        l_current_quat_w = self.asset.data.body_quat_w[:, wrist_idx_asset[0], :]  # [N,4]
+                        r_current_quat_w = self.asset.data.body_quat_w[:, wrist_idx_asset[1], :]  # [N,4]
+
+                        # root state per-env
+                        root_pos = self.asset.data.root_pos_w  # [N,3]
+                        root_quat = self.asset.data.root_quat_w  # [N,4]
+
+                        # convert positions to ROOT frame: p_b = quat_apply_inverse(root_quat, p_w - root_pos)
+                        l_current_b = quat_apply_inverse(root_quat, l_current_w - root_pos)  # [N,3]
+                        r_current_b = quat_apply_inverse(root_quat, r_current_w - root_pos)  # [N,3]
+
+                        # convert quaternions to ROOT frame: q_b = conj(root_quat) * q_w
+                        root_conj = quat_conjugate(root_quat)
+                        l_quat_b = quat_mul(root_conj, l_current_quat_w)  # [N,4]
+                        r_quat_b = quat_mul(root_conj, r_current_quat_w)  # [N,4]
+
+                        # average across envs to produce a single representative sample
+                        l_b_mean = l_current_b.mean(dim=0).cpu().numpy().tolist()
+                        r_b_mean = r_current_b.mean(dim=0).cpu().numpy().tolist()
+                        l_q_mean = l_quat_b.mean(dim=0).cpu().numpy().tolist()
+                        r_q_mean = r_quat_b.mean(dim=0).cpu().numpy().tolist()
+
+                        actual_pos = l_b_mean + r_b_mean  # [6] in ROOT frame
+                        actual_pose = l_q_mean + r_q_mean  # [8] quaternions in ROOT frame
+                        self.actual_position_list.append(actual_pos)
+                        self.actual_pose_list.append(actual_pose)
+                    except Exception:
+                        pass
+                # Broadcast root state via UDP if enabled (one line CSV: tstamp, x,y,z, qw,qx,qy,qz)
+                try:
+                    if getattr(self, "_udp_broadcast_enabled", False) and self._udp_broadcast_sock is not None:
+                        # send root state for env 0 (absolute world frame)
+                        rp = self.asset.data.root_pos_w[0]  # [3]
+                        rq = self.asset.data.root_quat_w[0]  # [4] (w,x,y,z)
+                        tstamp = time.time()
+                        msg = f"{tstamp:.6f},{rp[0].item():.6f},{rp[1].item():.6f},{rp[2].item():.6f},{rq[0].item():.6f},{rq[1].item():.6f},{rq[2].item():.6f},{rq[3].item():.6f}"
+                        try:
+                            self._udp_broadcast_sock.sendto(msg.encode('ascii'), self._udp_broadcast_addr)
+                            # increment sequence and optionally print every N sends
+                            # try:
+                            #     self._udp_broadcast_seq += 1
+                            #     pe = getattr(self, "_udp_broadcast_print_every", 0)
+                            #     if pe and (self._udp_broadcast_seq % pe) == 0:
+                            #         print(f"[MOTION_TRACKING][UDP SEND #{self._udp_broadcast_seq}] -> {self._udp_broadcast_addr} msg={msg}", flush=True)
+                            # except Exception:
+                            #     # non-critical debug failure
+                            #     pass
+                        except BlockingIOError:
+                            pass
+                        except Exception:
+                            # disable broadcaster on repeated failure
+                            try:
+                                self._udp_broadcast_sock.close()
+                            except Exception:
+                                pass
+                            self._udp_broadcast_sock = None
+                            self._udp_broadcast_enabled = False
+                except Exception:
+                    pass
+            # Save to CSV every 10s
+            now = time.time()
+            if now - self._last_csv_save_time >= 10.0:
+                import csv
+                import os
+                csv_path = os.path.join(os.getcwd(), "ee_tracking_log.csv")
+                with open(csv_path, "w", newline="") as f:
+                    writer = csv.writer(f)
+                    # Header: target pos (Lx,Ly,Lz,Rx,Ry,Rz), target RPY (Lr,Lp,Ly, Rr,Rp,Ry),
+                    # actual pos (Lx,Ly,Lz,Rx,Ry,Rz), actual RPY (Lr,Lp,Ly, Rr,Rp,Ry)
+                    header = [
+                        "t_lx","t_ly","t_lz","t_rx","t_ry","t_rz",
+                        "t_lr","t_lp","t_ly","t_rr","t_rp","t_ry",
+                        "a_lx","a_ly","a_lz","a_rx","a_ry","a_rz",
+                        "a_lr","a_lp","a_ly","a_rr","a_rp","a_ry",
+                    ]
+                    writer.writerow(header)
+                    for tp, tpo, ap, apo in zip(self.target_position_list, self.target_pose_list, self.actual_position_list, self.actual_pose_list):
+                        try:
+                            # target positions (6 floats)
+                            tpos = list(tp)
+                            # target quaternions: two quaternions concatenated (w,x,y,z, w,x,y,z)
+                            tq_l = tpo[0:4]
+                            tq_r = tpo[4:8]
+                            t_rpy_l = quat_wxyz_to_rpy(tq_l)
+                            t_rpy_r = quat_wxyz_to_rpy(tq_r)
+
+                            # actual positions (6 floats)
+                            apos = list(ap)
+                            aq_l = apo[0:4]
+                            aq_r = apo[4:8]
+                            a_rpy_l = quat_wxyz_to_rpy(aq_l)
+                            a_rpy_r = quat_wxyz_to_rpy(aq_r)
+
+                            row = tpos + list(t_rpy_l) + list(t_rpy_r) + apos + list(a_rpy_l) + list(a_rpy_r)
+                            writer.writerow(row)
+                        except Exception:
+                            # fallback: write raw lists if conversion fails
+                            writer.writerow([tp, tpo, ap, apo])
+                self._last_csv_save_time = now
+        except Exception as e:
+            print(f"[EE TRACKING LOG ERROR] {e}", flush=True)
 
     def debug_draw(self):
         root_pos = self.asset.data.root_pos_w    # [N,1,3]
@@ -982,32 +1179,48 @@ class MotionTrackingCommand(Command):
                 r_target_w = quat_apply(robot_root_quat, r_pos_b) + robot_root_pos     # [N, 3]
                 
                 # yellow points for root xy target (from UDP root_pos_udp)
-                # root_pos_udp contains the target xy offset in world frame
+                # root_pos_udp contains velocity in TARGET HEADING frame
+                # Visualize as a point offset from robot in world frame
                 root_pos_cmd = root_pos_udp.to(self.device)  # [3]
-                # Create target position: current robot root + xy offset from UDP (z at fixed height for visibility)
-                root_target_xy_w = robot_root_pos.clone()  # [N, 3]
-                root_target_xy_w[:, 0] += root_pos_cmd[0]  # add x offset
-                root_target_xy_w[:, 1] += root_pos_cmd[1]  # add y offset
-                root_target_xy_w[:, 2] = 1.5  # fixed height for visibility (above robot)
                 
-                # Orange point for root xy target position
+                # Convert from (x, y, z, w) to (w, x, y, z) for target yaw
+                root_quat_xyzw_vis = root_quat_udp.to(self.device)  # [4]
+                root_quat_wxyz_vis = torch.stack([
+                    root_quat_xyzw_vis[3],  # w
+                    root_quat_xyzw_vis[0],  # x
+                    root_quat_xyzw_vis[1],  # y
+                    root_quat_xyzw_vis[2],  # z
+                ], dim=-1)
+                root_quat_wxyz_vis = root_quat_wxyz_vis / (torch.norm(root_quat_wxyz_vis) + 1e-8)
+                target_yaw_quat_vis = yaw_quat(root_quat_wxyz_vis.unsqueeze(0))  # [1, 4]
+                target_yaw_quat_vis = target_yaw_quat_vis.expand(self.num_envs, -1)  # [N, 4]
+                
+                # Transform velocity from target frame to world frame for visualization
+                # Note: negate to match control direction
+                vel_in_target = torch.zeros(self.num_envs, 3, device=self.device)
+                vel_in_target[:, 0] = -root_pos_cmd[0]  # forward in target frame (negated)
+                vel_in_target[:, 1] = -root_pos_cmd[1]  # left in target frame (negated)
+                vel_in_world = quat_apply(target_yaw_quat_vis, vel_in_target)  # [N, 3]
+                
+                # Orange point: robot position + velocity direction (scaled for visibility)
+                root_target_xy_w = robot_root_pos.clone()  # [N, 3]
+                root_target_xy_w[:, 0] += vel_in_world[:, 0]  # add x offset in world
+                root_target_xy_w[:, 1] += vel_in_world[:, 1]  # add y offset in world
+                # Set orange point z = 1.5 + (root_pos_cmd[2] - 0.79)
+                root_target_xy_w[:, 2] = 1.5 + (root_pos_cmd[2] - 0.79)
+                
+                # Orange point for velocity target position
                 self.env.debug_draw.point(
                     root_target_xy_w, color=(1, 0.5, 0, 1), size=15.0
                 )
                 
                 # Yellow arrow for target heading direction (from root_quat_udp)
-                # Arrow starts from robot root position (at fixed height)
                 arrow_start = robot_root_pos.clone()  # [N, 3]
-                arrow_start[:, 2] = 1.5  # fixed height for visibility (above robot)
-                
-                # Arrow direction from root_quat_udp: forward direction (x-axis) rotated by target quaternion
-                root_quat_cmd = root_quat_udp.to(self.device)  # [4]
-                root_quat_cmd = root_quat_cmd / (torch.norm(root_quat_cmd) + 1e-8)  # normalize
-                root_quat_cmd = root_quat_cmd.unsqueeze(0).expand(self.num_envs, -1)  # [N, 4]
+                arrow_start[:, 2] = 1.5  # fixed height for visibility
                 
                 # Forward direction (x-axis) rotated by target quaternion
-                forward_dir = torch.tensor([1.0, 0.0, 0.0], device=self.device).unsqueeze(0).expand(self.num_envs, -1)  # [N, 3]
-                arrow_dir = quat_apply(root_quat_cmd, forward_dir)  # [N, 3]
+                forward_dir = torch.tensor([1.0, 0.0, 0.0], device=self.device).unsqueeze(0).expand(self.num_envs, -1)
+                arrow_dir = quat_apply(target_yaw_quat_vis, forward_dir)  # [N, 3]
                 arrow_dir[:, 2] = 0.0  # keep arrow horizontal
                 arrow_dir = arrow_dir * 0.5  # scale arrow length
                 
@@ -1634,6 +1847,7 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
             self.force_type_probs[1:5] = force_prob
             self.force_type_probs[0] = 1.0 - force_prob * 4
 
+    # old command obs
     # @observation
     # def command(self):
     #     # here we use root pos instead of student body pos
@@ -1717,41 +1931,118 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         
         return out
 
-    # @observation
-    # def command(self):
-    #     """
-    #     Simplified command observation for teleop mode.
-    #     Only provides next frame target (same as training command).
+    @observation
+    def command(self):
+        """
+        Simplified command observation for teleop mode.
+        Only provides next frame target (same as training command).
         
-    #     Output format (6 dimensions, matches training):
-    #     - root_height: [N, 1] - current frame root height
-    #     - target_linvel_b: [N, 2] - target xy linear velocity in body frame (zeros for teleop)
-    #     - target_heading_b: [N, 2] - target heading direction in body frame ([1, 0] = face forward)
-    #     - force_safe_limit: [N, 1] - force limit
+        Output format (6 dimensions, matches training):
+        - root_height: [N, 1] - current frame root height
+        - target_linvel_b: [N, 2] - target xy linear velocity in body frame
+        - target_heading_b: [N, 2] - target heading direction in body frame
+        - force_safe_limit: [N, 1] - force limit
         
-    #     Total: 1 + 2 + 2 + 1 = 6 dimensions
-    #     """
-    #     # Get current root height
-    #     root_height = self._motion.root_pos_w[:, 0, 2:3]  # [N, 1]
+        Total: 1 + 2 + 2 + 1 = 6 dimensions
         
-    #     # Target linear velocity = 0 for teleop (motion comes from UDP input)
-    #     target_linvel_b_xy = torch.zeros(self.num_envs, 2, device=self.device)  # [N, 2]
+        UDP teleop data format:
+        - root_pos(3): root xy position used for velocity command (z is height)
+        - root_quat(4): root orientation used for heading direction
+        """
         
-    #     # Target heading = [1, 0] (face forward, no rotation)
-    #     target_heading_b_xy = torch.zeros(self.num_envs, 2, device=self.device)  # [N, 2]
-    #     target_heading_b_xy[:, 0] = 1.0  # x = 1, y = 0
+        # Default values
+        root_height = torch.full((self.num_envs, 1), 0.79, device=self.device)  # [N, 1]
+        target_linvel_b_xy = torch.zeros(self.num_envs, 2, device=self.device)  # [N, 2]
+        target_heading_b_xy = torch.zeros(self.num_envs, 2, device=self.device)  # [N, 2]
+        target_heading_b_xy[:, 0] = 1.0  # default: face forward [1, 0]
         
-    #     # Force safe limit
-    #     force_limit = self.force_safe_limit_tl.current  # [N, 1]
+        # UDP teleop control
+        if hasattr(self, "_teleop") and self._teleop is not None:
+            seq, t_recv, \
+                root_pos, root_quat, \
+                head_pos_b, head_quat_b, \
+                l_pos_b, l_quat_b, \
+                r_pos_b, r_quat_b = self._teleop.get_latest()
+            
+            if seq >= 0:
+                # ---- Target heading from root_quat ----
+                # UDP sends quaternion in (x, y, z, w) format, but yaw_quat expects (w, x, y, z)
+                # Convert from (x, y, z, w) to (w, x, y, z)
+                root_quat_xyzw = root_quat.to(self.device)  # [4] in (x, y, z, w) format
+                root_quat_wxyz = torch.stack([
+                    root_quat_xyzw[3],  # w
+                    root_quat_xyzw[0],  # x
+                    root_quat_xyzw[1],  # y
+                    root_quat_xyzw[2],  # z
+                ], dim=-1)  # [4] in (w, x, y, z) format
+                root_quat_wxyz = root_quat_wxyz / (torch.norm(root_quat_wxyz) + 1e-8)  # normalize
+                target_yaw_quat = yaw_quat(root_quat_wxyz.unsqueeze(0))  # [1, 4] target yaw in world frame
+                target_yaw_quat = target_yaw_quat.expand(self.num_envs, -1)  # [N, 4]
+                
+                # Get current robot yaw for body frame conversion
+                current_yaw_quat = yaw_quat(self.asset.data.root_quat_w)  # [N, 4]
+                
+                # Target heading in world frame (x-axis of target frame)
+                heading_vec = torch.tensor([1.0, 0.0, 0.0], device=self.device)
+                target_heading_w = quat_apply(target_yaw_quat, heading_vec.unsqueeze(0).expand(self.num_envs, -1))  # [N, 3]
+                
+                # Convert heading to current robot's body frame
+                target_heading_b = quat_apply_inverse(current_yaw_quat, target_heading_w)  # [N, 3]
+                target_heading_b_xy = target_heading_b[:, :2]  # [N, 2]
+                
+                # ---- Target linear velocity from root_pos xy ----
+                # root_pos xy is the velocity command in TARGET HEADING frame (relative to target orientation)
+                # First transform to world frame using target yaw, then to current robot body frame
+                # Note: negate the input to match control direction
+                vel_scale = 1.0  # adjust this for sensitivity
+                vel_in_target_frame = torch.zeros(self.num_envs, 3, device=self.device)  # [N, 3]
+                vel_in_target_frame[:, 0] = -root_pos[0].to(self.device) * vel_scale  # forward in target frame (negated)
+                vel_in_target_frame[:, 1] = -root_pos[1].to(self.device) * vel_scale  # left in target frame (negated)
+                # z stays 0
+                
+                # Transform: target frame -> world frame -> current body frame
+                target_linvel_w = quat_apply(target_yaw_quat, vel_in_target_frame)  # [N, 3] in world
+                target_linvel_b = quat_apply_inverse(current_yaw_quat, target_linvel_w)  # [N, 3] in body
+                target_linvel_b_xy = target_linvel_b[:, :2]  # [N, 2]
+                
+                # ---- Root height from root_pos z (optional) ----
+                if root_pos[2] > 0.1:  # if z is meaningful (> 0.1m)
+                    root_height = torch.full((self.num_envs, 1), root_pos[2].item(), device=self.device)
+                
+                # Debug print (occasional)
+                if hasattr(self, "_command_udp_counter"):
+                    self._command_udp_counter += 1
+                else:
+                    self._command_udp_counter = 0
+                
+                if self._command_udp_counter % 200 == 0:
+                    print(f"[command UDP] seq={seq}, "
+                          f"vel_target_frame=[{root_pos[0].item():.2f}, {root_pos[1].item():.2f}], "
+                          f"linvel_b={target_linvel_b_xy[0].tolist()}, "
+                          f"heading_b={target_heading_b_xy[0].tolist()}", flush=True)
         
-    #     out = torch.cat([
-    #         root_height,           # [N, 1]
-    #         target_linvel_b_xy,    # [N, 2]
-    #         target_heading_b_xy,   # [N, 2]
-    #         force_limit            # [N, 1]
-    #     ], dim=-1)  # [N, 6]
+        # Force safe limit
+        force_limit = self.force_safe_limit_tl.current  # [N, 1]
+
+        # # default zero command for teleop
+        # # Get current root height
+        # root_height = self._motion.root_pos_w[:, 0, 2:3]  # [N, 1]
+        # # Target linear velocity = 0 for teleop (motion comes from UDP input)
+        # target_linvel_b_xy = torch.zeros(self.num_envs, 2, device=self.device)  # [N, 2]
+        # # Target heading = [1, 0] (face forward, no rotation)
+        # target_heading_b_xy = torch.zeros(self.num_envs, 2, device=self.device)  # [N, 2]
+        # target_heading_b_xy[:, 0] = 1.0  # x = 1, y = 0
+        # # Force safe limit
+        # force_limit = self.force_safe_limit_tl.current  # [N, 1]
         
-    #     return out
+        out = torch.cat([
+            root_height,           # [N, 1]
+            target_linvel_b_xy,    # [N, 2]
+            target_heading_b_xy,   # [N, 2]
+            force_limit            # [N, 1]
+        ], dim=-1)  # [N, 6]
+        
+        return out
 
     @observation
     def force_priv(self):

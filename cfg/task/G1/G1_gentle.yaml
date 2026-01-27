@@ -6,7 +6,7 @@ defaults:
   - _self_
 
 robot: 
-  name: g1
+  name: g1_col_full
 
 action:
   _target_: active_adaptation.envs.mdp.action.JointPosition

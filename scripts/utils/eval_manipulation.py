@@ -5,7 +5,7 @@ Provides helper functions specific to manipulation tasks.
 """
 
 import torch
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List, Optional
 from pathlib import Path
 
 
@@ -103,3 +103,211 @@ def log_manipulation_metrics(
         log_str += f" | Grasp: {grasp_rate:.1%}"
     
     print(log_str)
+
+
+def get_contact_forces(env, body_names: Optional[List[str]] = None, mean_over_history: bool = True):
+    """
+    Retrieve net contact forces from the environment's ContactSensor.
+
+    Args:
+        env: The environment instance (expected to have `scene` with a `contact_forces` sensor).
+        body_names: Optional list or pattern of body names to filter (passed to sensor.find_bodies).
+        mean_over_history: If True, use the history-averaged forces (net_forces_w_history.mean(1)),
+                           otherwise use current net_forces_w.
+
+    Returns:
+        Dict mapping body_name -> torch.Tensor of shape [num_envs, 3]. If the sensor or bodies are
+        not available, returns an empty dict.
+    """
+    forces_dict: Dict[str, torch.Tensor] = {}
+
+    # Print target info for user clarity
+    if body_names is None:
+        print("可视化目标: 所有 bodies (未指定 body_names)")
+    else:
+        print(f"可视化目标: {body_names}")
+
+    try:
+        contact_sensor = env.scene["contact_forces"]
+    except Exception:
+        # No contact sensor available
+        print("没搜到 contact sensor (env.scene['contact_forces'] 不存在)")
+        return forces_dict
+
+    # choose data source
+    data = None
+    try:
+        if mean_over_history and hasattr(contact_sensor.data, "net_forces_w_history"):
+            data = contact_sensor.data.net_forces_w_history.mean(1)
+            print("使用 net_forces_w_history.mean(1) 作为接触力来源")
+        elif hasattr(contact_sensor.data, "net_forces_w"):
+            data = contact_sensor.data.net_forces_w
+            print("使用 net_forces_w 作为接触力来源")
+        else:
+            print("没有 contact 数据 (contact_sensor.data 中缺少 net_forces_w 或 net_forces_w_history)")
+            return forces_dict
+    except Exception:
+        print("读取 contact_sensor.data 时出错")
+        return forces_dict
+
+    # data expected shape: [num_envs, num_bodies, 3]
+    try:
+        body_ids, found_names = contact_sensor.find_bodies(body_names if body_names is not None else ".*")
+    except Exception:
+        print("调用 contact_sensor.find_bodies 时出错")
+        return forces_dict
+
+    if len(found_names) == 0:
+        print(f"没搜到 body_names: {body_names}")
+        return forces_dict
+
+    print(f"找到 bodies: {found_names}")
+
+    # Quick check: any contact at all?
+    try:
+        max_norm = data.norm(dim=-1).max().item()
+    except Exception:
+        max_norm = 0.0
+
+    if max_norm <= 1e-6:
+        print("没有contact (所有 body 的力都为 0)")
+        return forces_dict
+
+    for bid, bname in zip(body_ids, found_names):
+        try:
+            forces_dict[bname] = data[:, bid, :].clone()
+        except Exception:
+            # skip if indexing fails
+            continue
+
+    return forces_dict
+
+
+def debug_draw_contact_forces(env, body_names: Optional[List[str]] = None, scale: float = 0.01, color=(0.2, 0.8, 0.2, 1.0), env_idx: int = 0, print_forces: bool = True):
+    """
+    Print and (optionally) draw contact forces for the requested bodies.
+
+    Args:
+        env: The environment instance (must expose `debug_draw` and `scene`).
+        body_names: Optional list or pattern of body names to visualize (passed to sensor.find_bodies).
+        scale: Multiplier applied to force vectors for visualization.
+        color: RGBA tuple for drawing arrows/points.
+        env_idx: Which environment index to display when printing/drawing single env values.
+        print_forces: Whether to print force magnitudes to stdout.
+
+    Notes:
+        This function is defensive: it will early-return if ContactSensor or debug drawing
+        is not available in the provided `env`.
+    """
+    if not hasattr(env, "scene"):
+        print("env 中没有 scene 属性，无法读取 contact 信息")
+        return
+
+    # Print requested target
+    if body_names is None:
+        print("debug_draw_contact_forces: 目标 bodies = 所有 bodies")
+    else:
+        print(f"debug_draw_contact_forces: 目标 bodies = {body_names}")
+
+    try:
+        contact_sensor = env.scene["contact_forces"]
+    except Exception:
+        print("没搜到 contact sensor，无法可视化 contact force")
+        return
+
+    forces = get_contact_forces(env, body_names=body_names, mean_over_history=True)
+    if not forces:
+        print("没搜到对应的 body，或没有 contact (get_contact_forces 返回空)")
+        return
+
+    print(f"即将可视化的 bodies: {list(forces.keys())}")
+
+    # Try to obtain body positions for drawing. We'll try several common places and be defensive.
+    body_positions = {}
+    # 1) contact_sensor.data may contain body positions
+    try:
+        if hasattr(contact_sensor.data, "body_pos_w"):
+            bp = contact_sensor.data.body_pos_w  # [num_envs, num_bodies, 3]
+            for name in forces.keys():
+                ids, names = contact_sensor.find_bodies(name)
+                if len(ids) > 0:
+                    body_positions[name] = bp[env_idx, ids[0], :].clone()
+    except Exception:
+        pass
+
+    # 2) try to find object/articulation in the scene by name
+    for name in forces.keys():
+        if name in body_positions:
+            continue
+        try:
+            obj = None
+            if hasattr(env.scene, "get"):
+                obj = env.scene.get(name, None)
+            if obj is None and name in env.scene:
+                obj = env.scene[name]
+            if obj is not None and hasattr(obj, "data"):
+                if hasattr(obj.data, "root_pos_w"):
+                    body_positions[name] = obj.data.root_pos_w[env_idx].clone()
+                elif hasattr(obj.data, "body_pos_w"):
+                    body_positions[name] = obj.data.body_pos_w[env_idx, 0].clone()
+        except Exception:
+            pass
+
+    # If debug draw not available, only print
+    has_draw = hasattr(env, "debug_draw") and (getattr(env, "sim", None) is None or env.sim.has_gui())
+
+    any_nonzero = False
+    for name, vec in forces.items():
+        # vec is [num_envs, 3]
+        try:
+            v = vec[env_idx]
+        except Exception:
+            # fallback to first env
+            v = vec[0]
+
+        try:
+            mag = v.norm().item()
+        except Exception:
+            mag = float("nan")
+
+        if mag and mag > 1e-6:
+            any_nonzero = True
+
+        if print_forces:
+            if mag == float("nan"):
+                print(f"Contact force [{name}]: 无法计算 magnitude")
+            else:
+                print(f"Contact force [{name}] (env {env_idx}): {mag:.3f} N, vec=({v[0]:.3f}, {v[1]:.3f}, {v[2]:.3f})")
+
+        if has_draw and name in body_positions and mag > 1e-6:
+            try:
+                pos = body_positions[name]
+                # draw an arrow (vector) and a point at the body position
+                env.debug_draw.vector(pos, v * scale, color=color)
+                env.debug_draw.point(pos, color=color)
+            except Exception:
+                # don't abort drawing others
+                continue
+
+    if not any_nonzero:
+        print("没有contact（所有可查询 bodies 的力都非常小）")
+
+
+def list_contact_sensor_bodies(env):
+    """
+    Print all body names known to the contact sensor (for debugging name mismatches).
+    """
+    try:
+        contact_sensor = env.scene["contact_forces"]
+    except Exception:
+        print("没搜到 contact sensor (env.scene['contact_forces'] 不存在)")
+        return
+
+    try:
+        ids, names = contact_sensor.find_bodies(".*")
+        if len(names) == 0:
+            print("contact sensor 存在，但没有注册任何 bodies")
+        else:
+            print(f"contact sensor 注册的 bodies ({len(names)}): {names}")
+    except Exception as e:
+        print(f"调用 contact_sensor.find_bodies 出错: {e}")

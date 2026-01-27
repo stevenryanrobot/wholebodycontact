@@ -43,6 +43,7 @@ def create_box_cfg(
     mass: float = 1.0,
     static: bool = False,
     collision: bool = True,
+    friction: float = None
 ) -> "RigidObjectCfg":
     """
     Create a box rigid object configuration.
@@ -82,6 +83,37 @@ def create_box_cfg(
         )
         mass_props = sim_utils.MassPropertiesCfg(mass=mass)
     
+    # Prepare collision properties
+    collision_props_kwargs = {"collision_enabled": collision}
+    if friction is not None:
+        collision_props_kwargs["friction"] = friction
+    # Build collision_cfg before constructing the RigidObjectCfg so we
+    # can use normal statements (some IsaacLab versions expect different
+    # kwarg names for friction).
+    try:
+        if "friction" in collision_props_kwargs and collision_props_kwargs["friction"] is not None:
+            friction_val = collision_props_kwargs.pop("friction")
+            tried = False
+            candidates = ["friction", "static_friction", "friction_coefficient", "mu", "static_friction_coefficient"]
+            for cand in candidates:
+                try_kw = dict(collision_props_kwargs)
+                try_kw[cand] = friction_val
+                try:
+                    collision_cfg = sim_utils.CollisionPropertiesCfg(**try_kw)
+                    tried = True
+                    break
+                except TypeError:
+                    continue
+            if not tried:
+                collision_cfg = sim_utils.CollisionPropertiesCfg(**collision_props_kwargs)
+        else:
+            collision_cfg = sim_utils.CollisionPropertiesCfg(**collision_props_kwargs)
+    except TypeError:
+        try:
+            collision_cfg = sim_utils.CollisionPropertiesCfg(collision_enabled=collision)
+        except Exception:
+            collision_cfg = sim_utils.CollisionPropertiesCfg(**{k: v for k, v in collision_props_kwargs.items() if k in ("collision_enabled",)})
+
     return RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/" + name,
         spawn=sim_utils.CuboidCfg(
@@ -92,9 +124,7 @@ def create_box_cfg(
             ),
             rigid_props=rigid_props,
             mass_props=mass_props,
-            collision_props=sim_utils.CollisionPropertiesCfg(
-                collision_enabled=collision,
-            ),
+            collision_props=collision_cfg,
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             pos=pos,
