@@ -17,7 +17,7 @@ objects:
     radius: 0.18
     height: 0.32
     color: [0.2, 0.6, 0.9]
-    mass: 0.5
+    mass: 0.1
 
   - type: box_static
     name: bed
