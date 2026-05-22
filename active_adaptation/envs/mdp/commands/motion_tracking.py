@@ -977,6 +977,9 @@ class MotionTrackingCommand(Command):
             self.reward_root_pos_w = reward_pos
             self.reward_root_quat_w = reward_quat
 
+        if getattr(self, "compliance", False) and hasattr(self, "root_compliance_offset_xy"):
+            self.reward_root_pos_w[:, :2] += self.update_root_compliance_offset()
+
     def before_update(self):
         self.t = torch.clamp_max(self.t + 1, self.lengths - 1)
         # In teleop mode, never mark as finished (disable auto-reset from motion end)
@@ -1370,6 +1373,10 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         self.force_time_range = (20, 200)
         self.ramping_time_range = (25, 100)
         self.force_origin_transit_time_range = (25, 100)
+        self.root_compliance_force_threshold = 15.0
+        self.root_compliance_gain = 0.01
+        self.root_compliance_max_offset = 0.3
+        self.root_compliance_ema = 0.95
 
         self.skip_ref = False
 
@@ -1427,6 +1434,7 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
             self.force_applied_b = torch.zeros(self.num_envs, self.num_force_bodies, 3, dtype=torch.float32) # applied force in body frame
             self.force_expected_w = torch.zeros(self.num_envs, self.num_force_bodies, 3, dtype=torch.float32) # expected apply force
             self.force_expected_b = torch.zeros(self.num_envs, self.num_force_bodies, 3, dtype=torch.float32) # expected apply force in body frame
+            self.root_compliance_offset_xy = torch.zeros(self.num_envs, 2, dtype=torch.float32)
 
             # force apply
             self.force_pos_delta = torch.zeros(self.num_envs, self.num_force_bodies, 3, dtype=torch.float32)
@@ -1455,6 +1463,20 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
 
         self.configure_admittance()
 
+    def update_root_compliance_offset(self):
+        force_net_xy = self.force_applied_w.sum(dim=1)[:, :2]
+        force_mag = force_net_xy.norm(dim=-1, keepdim=True)
+        force_excess_xy = (force_mag - self.root_compliance_force_threshold).clamp_min(0.0) * force_net_xy / (force_mag + 1e-6)
+        target_offset_xy = clamp_norm(
+            self.root_compliance_gain * force_excess_xy,
+            max=self.root_compliance_max_offset,
+        )
+        self.root_compliance_offset_xy[:] = (
+            self.root_compliance_ema * self.root_compliance_offset_xy
+            + (1.0 - self.root_compliance_ema) * target_offset_xy
+        )
+        return self.root_compliance_offset_xy
+
     def configure_admittance(self):
         self.admit = AdmittanceMassChain(
             num_envs=self.num_envs,
@@ -1482,6 +1504,7 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         self.force_kp_tl.reset(env_ids)
         self.force_kp_ramping_down[env_ids] = False
         self.perturb_force.reset(env_ids, value=0.0)
+        self.root_compliance_offset_xy[env_ids] = 0.0
         
         if refresh_time:
             self.force_sample_timer[env_ids] = random_uniform(env_ids.shape[0], 10, 60, self.device).int()
