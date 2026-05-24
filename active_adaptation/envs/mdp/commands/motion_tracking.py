@@ -900,9 +900,9 @@ class MotionTrackingCommand(Command):
         
         # Target wrist positions in root frame
         if hasattr(motion, "local_body_pos"):
-            target_wrist_b = motion.local_body_pos[:, 0, wrist_idx_motion, :]  # [N, 2, 3]
+            target_wrist_b = motion.local_body_pos[:, 0, wrist_idx_motion, :].clone()  # [N, 2, 3]
         elif hasattr(motion, "body_pos_b"):
-            target_wrist_b = motion.body_pos_b[:, 0, wrist_idx_motion, :]      # [N, 2, 3]
+            target_wrist_b = motion.body_pos_b[:, 0, wrist_idx_motion, :].clone()      # [N, 2, 3]
         else:
             return torch.zeros(self.num_envs, 1, device=self.device)
         
@@ -911,6 +911,16 @@ class MotionTrackingCommand(Command):
         root_pos = self.asset.data.root_pos_w.unsqueeze(1)                   # [N, 1, 3]
         root_quat = self.asset.data.root_quat_w.unsqueeze(1)                 # [N, 1, 4]
         actual_wrist_b = quat_apply_inverse(root_quat, actual_wrist_w - root_pos)  # [N, 2, 3]
+
+        if getattr(self, "compliance", False) and hasattr(self, "force_keypoint_w"):
+            force_apply_idx_asset = self.force_apply_idx_asset.tolist()
+            for wrist_i, asset_i in enumerate(wrist_idx_asset):
+                if asset_i in force_apply_idx_asset:
+                    force_i = force_apply_idx_asset.index(asset_i)
+                    target_wrist_b[:, wrist_i, :] = quat_apply_inverse(
+                        root_quat[:, 0],
+                        self.force_keypoint_w[:, force_i, :] - root_pos[:, 0],
+                    )
         
         # Compute error
         diff = target_wrist_b - actual_wrist_b
