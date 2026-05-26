@@ -30,8 +30,8 @@ flags: []
 command:
   _target_: active_adaptation.envs.mdp.commands.motion_tracking.MotionTrackingCommand_impedance
   student_train: True
-  max_force: 30.0
-  net_force_limit: 30.0
+  max_force: 120.0
+  net_force_limit: 120.0
   net_torque_limit: 20.0
   ignore_joint_patterns: []
   joint_patterns: ["waist_*", ".*_hip_.*", ".*_knee.*", ".*wrist.*"]
@@ -84,7 +84,7 @@ observation:
     root_ang_vel_history:      {history_steps: [0], noise_std: 0.05}
     projected_gravity_history: {history_steps: [0], noise_std: 0.01}
 
-    joint_pos_history:         {history_steps: [0, 1, 2, 3, 4, 8], noise_std: 0.005} # [0, 1, 2, 3, 4, 8]
+    joint_pos_history:         {history_steps: [0, 1, 2, 3, 4], noise_std: 0.005} # [0, 1, 2, 3, 4, 8]
     prev_actions:   {steps: 3}
   joint_target:
     # Teacher-only: direct joint target input (not compressed through encoder)

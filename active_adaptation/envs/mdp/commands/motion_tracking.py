@@ -1415,6 +1415,7 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
 
             # force spring / ramping
             self.force_kp_scaled = torch.zeros(self.num_envs, self.num_force_bodies, 1, dtype=torch.float32) # scaled spring stiffness (multiplied by alpha)
+            self.force_kp_matrix = torch.zeros(self.num_envs, self.num_force_bodies, 3, 3, dtype=torch.float32)
             self.force_kp_sample_timer = torch.zeros(self.num_envs, dtype=torch.int32) # next time to change slope
             self.force_kp_ramping_down = torch.zeros(self.num_envs, dtype=torch.bool) # is ramping down
             self.force_kp_tl = TemporalLerp(
@@ -1473,6 +1474,20 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
 
         self.configure_admittance()
 
+    def update_force_kp_matrix(self):
+        diag = torch.cat([
+            self.force_kp_scaled,
+            self.force_kp_scaled,
+            self.force_kp_scaled,
+        ], dim=-1)
+        self.force_kp_matrix[:] = torch.diag_embed(diag)
+
+    def apply_force_kp_matrix(self, pos_diff: torch.Tensor):
+        kp_matrix = self.force_kp_matrix
+        while kp_matrix.dim() < pos_diff.dim() + 1:
+            kp_matrix = kp_matrix.unsqueeze(0)
+        return torch.matmul(kp_matrix, pos_diff.unsqueeze(-1)).squeeze(-1)
+
     def update_root_compliance_offset(self):
         force_net_xy = self.force_applied_w.sum(dim=1)[:, :2]
         force_mag = force_net_xy.norm(dim=-1, keepdim=True)
@@ -1512,6 +1527,7 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         self.force_enable[env_ids] = 0
         self.force_origin_tl.reset(env_ids)
         self.force_kp_tl.reset(env_ids)
+        self.force_kp_matrix[env_ids] = 0.0
         self.force_kp_ramping_down[env_ids] = False
         self.perturb_force.reset(env_ids, value=0.0)
         self.root_compliance_offset_xy[env_ids] = 0.0
@@ -1609,6 +1625,7 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
             self.force_pos_delta[need_resample_envs] = rand_points_isotropic(need_resample_envs.shape[0], self.num_force_bodies, r_max=0.05, device=self.device)
 
         self.force_kp_scaled = self.force_kp_tl.current * self.force_enable
+        self.update_force_kp_matrix()
 
     def force_reset_origin(self, env_ids: torch.Tensor):
         pos_w = self.asset.data.body_pos_w[env_ids][:, self.force_apply_idx_asset, :]
@@ -1710,10 +1727,10 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
             )
             # external force
             F_ext_b = clamp_norm(
-                self.force_kp_scaled * self.project_pos_diff(
+                self.apply_force_kp_matrix(self.project_pos_diff(
                     force_origin_b_exp - admit_point_b,
                     force_dir=force_dir_b_exp,
-                ),
+                )),
                 self.max_force * self.force_alpha
             )
 
@@ -1731,10 +1748,10 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         self.force_keypoint_w_prev[:] = self.force_keypoint_w
 
         force_expected_b = clamp_norm(
-            self.force_kp_scaled * self.project_pos_diff(
+            self.apply_force_kp_matrix(self.project_pos_diff(
                 force_origin_b - force_keypoint_b,
                 force_dir=force_dir_b,
-            ),
+            )),
             self.max_force * self.force_alpha
         )
         self.force_expected_b[:] = force_expected_b
@@ -1817,7 +1834,10 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         pos_w = self.asset.data.body_pos_w[:, self.force_apply_idx_asset, :]
         quat_w = self.asset.data.body_quat_w[:, self.force_apply_idx_asset, :]
 
-        self.force_applied_w[:] = clamp_norm(self.force_kp_scaled * self.project_pos_diff(self.force_origin_w - pos_w, force_dir=self.force_dir_w), self.max_force * self.force_alpha)
+        self.force_applied_w[:] = clamp_norm(
+            self.force_kp_scaled * self.project_pos_diff(self.force_origin_w - pos_w, force_dir=self.force_dir_w),
+            self.max_force * self.force_alpha
+        )
         self.force_applied_b[:] = quat_apply_inverse(
             self.asset.data.root_quat_w.unsqueeze(1),
             self.force_applied_w
