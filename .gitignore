@@ -203,7 +203,6 @@ sim2sim/real_g1/plot
 sim2sim/real_g1/*.npy
 motion.npy
 datasettrain.sh
-train.sh
 
 # datasets
 dataset/
