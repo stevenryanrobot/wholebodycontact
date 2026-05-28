@@ -42,6 +42,8 @@ def main():
                         help="Objects config file (e.g., cfg/objects/test_scene.yaml)")
     parser.add_argument("--full_collision", action="store_true", default=False,
                         help="Use robot USD with full collision meshes (g1_col_full)")
+    parser.add_argument("--obs_source", choices=["udp", "motion"], default="udp",
+                        help="Observation source for command/root_and_wrist_6d in play mode")
     args = parser.parse_args()
 
     # Determine checkpoint source
@@ -130,8 +132,12 @@ def main():
         cfg["task"]["max_episode_length"] = 1000000  # Very long episode for teleop (no auto-reset)
         # Disable all termination conditions for teleop mode
         cfg["task"]["termination"] = {}
-        # Disable motion finish triggering reset (for teleop mode)
-        cfg["task"]["command"]["disable_motion_finish"] = True
+        # Disable motion finish triggering reset only for live teleop mode.
+        cfg["task"]["command"]["disable_motion_finish"] = args.obs_source == "udp"
+        cfg["task"]["command"]["teleop"] = {
+            "enabled": args.obs_source == "udp",
+            "obs_source": args.obs_source,
+        }
         cfg["export_policy"] = args.export
         cfg["perf_test"] = False
         
@@ -162,7 +168,10 @@ def main():
         print(f"  Run: {args.run_path or args.checkpoint}")
         print(f"  Num envs: {args.num_envs}")
         print(f"  Max episode length: 1000000 steps (~5.5 hours at 50Hz)")
-        print(f"  Teleop: Enabled (waiting for UDP input on port 15000)")
+        if args.obs_source == "udp":
+            print(f"  Obs source: UDP teleop (waiting for input on port 15000)")
+        else:
+            print(f"  Obs source: motion dataset")
         if args.objects:
             print(f"  Objects: {args.objects}")
         print("="*60 + "\n")

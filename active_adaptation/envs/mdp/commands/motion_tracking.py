@@ -220,7 +220,8 @@ class MotionTrackingCommand(Command):
                 init_noise: dict[str, float] = {},
                 reward_sigma: dict[str, list[float]] = {},
                 student_train: bool = False,
-                disable_motion_finish: bool = False,):
+                disable_motion_finish: bool = False,
+                teleop: dict | None = None,):
         super().__init__(env)
         
         # Lists for logging UDP target and actual EE position/pose
@@ -231,6 +232,11 @@ class MotionTrackingCommand(Command):
         self._last_csv_save_time = time.time()
         
         self.disable_motion_finish = disable_motion_finish
+        teleop = teleop or {}
+        self.teleop_enabled = bool(teleop.get("enabled", False))
+        self.teleop_obs_source = teleop.get("obs_source", "motion")
+        if self.teleop_obs_source not in ("motion", "udp"):
+            raise ValueError(f"Unsupported teleop obs_source: {self.teleop_obs_source}")
         self.future_steps = torch.tensor([0, 2, 4, 8, 16], device=self.device)
 
         self.zero_init_prob = 1.0
@@ -292,8 +298,16 @@ class MotionTrackingCommand(Command):
             debug=False,
         )
 
-        self._teleop = UdpTeleopReceiver(bind_port=15000) 
-        self._teleop.start()
+        self._teleop = None
+        if self.teleop_enabled or self.teleop_obs_source == "udp":
+            self._teleop = UdpTeleopReceiver(bind_port=15000)
+            self._teleop.start()
+        print(
+            f"[MotionTrackingCommand] teleop.enabled={self.teleop_enabled}, "
+            f"obs_source={self.teleop_obs_source}, "
+            f"udp_receiver={'on' if self._teleop is not None else 'off'}",
+            flush=True,
+        )
 
         # Optional UDP broadcaster for root state (disabled by default).
         # Enable by setting environment variable MOTION_TRACKING_UDP_BROADCAST to "host:port" (e.g. 127.0.0.1:15001)
@@ -587,8 +601,7 @@ class MotionTrackingCommand(Command):
     def target_joint_pos_obs_sym(self):
         return sym_utils.joint_space_symmetry(self.asset, self.dataset.joint_names).repeat(len(self.future_steps))
 
-    @observation
-    def root_and_wrist_6d(self):
+    def _root_and_wrist_6d_from_motion(self):
         """
         Teleoperation observation: wrist 6D poses only (each 3 pos + 3 axis-angle) in ROOT frame.
         
@@ -661,6 +674,50 @@ class MotionTrackingCommand(Command):
         
 
         return out
+
+    def _root_and_wrist_6d_from_udp(self):
+        """
+        Wrist 6D poses from UDP teleop input, matching _root_and_wrist_6d_from_motion.
+
+        Output: [N, 12]
+        Order: left_pos(3), right_pos(3), left_axis_angle(3), right_axis_angle(3).
+        """
+        if self._teleop is None:
+            return torch.zeros(self.num_envs, 12, device=self.device)
+
+        seq, _t_recv, \
+            _root_pos_unused, _root_quat_unused, \
+            _head_pos_b, _head_quat_b, \
+            l_pos_b, l_quat_b, \
+            r_pos_b, r_quat_b = self._teleop.get_latest()
+
+        if seq < 0:
+            return torch.zeros(self.num_envs, 12, device=self.device)
+
+        pos_sel_b = torch.stack([l_pos_b, r_pos_b], dim=0).to(self.device)
+        pos_sel_b = pos_sel_b.unsqueeze(0).expand(self.num_envs, -1, -1)
+
+        quat_sel_b = torch.stack([l_quat_b, r_quat_b], dim=0).to(self.device)
+        quat_sel_b = quat_sel_b / (torch.norm(quat_sel_b, dim=-1, keepdim=True) + 1e-8)
+        quat_sel_b = quat_sel_b.unsqueeze(0).expand(self.num_envs, -1, -1)
+
+        axis_ang_b = axis_angle_from_quat(quat_sel_b)
+        return torch.cat([
+            pos_sel_b.reshape(self.num_envs, -1),
+            axis_ang_b.reshape(self.num_envs, -1),
+        ], dim=-1)
+
+    @observation
+    def root_and_wrist_6d(self):
+        if not hasattr(self, "_printed_root_and_wrist_6d_source"):
+            print(
+                f"[MotionTrackingCommand] root_and_wrist_6d source={self.teleop_obs_source}",
+                flush=True,
+            )
+            self._printed_root_and_wrist_6d_source = True
+        if self.teleop_obs_source == "udp":
+            return self._root_and_wrist_6d_from_udp()
+        return self._root_and_wrist_6d_from_motion()
 
     def root_and_wrist_6d_sym(self):
         """
@@ -755,50 +812,6 @@ class MotionTrackingCommand(Command):
         out = torch.cat([pos_sel.reshape(self.num_envs, -1), axis_ang.reshape(self.num_envs, -1)], dim=-1)
         return out
     
-    # @observation
-    # def root_and_wrist_6d(self):
-    #     """
-    #     Teleoperation observation from UDP socket (wrist only, in ROOT frame).
-    #     Output: [N, 12]
-    #     Order:
-    #     left_pos(3), right_pos(3),
-    #     left_axis_angle(3), right_axis_angle(3)
-    #     All in ROOT frame.
-    #     """
-    #     if not hasattr(self, "_teleop") or self._teleop is None:
-    #         return torch.zeros(self.num_envs, 12, device=self.device)
-
-    #     seq, t_recv, \
-    #         root_pos_unused, root_quat_unused, \
-    #         head_pos_b, head_quat_b, \
-    #         l_pos_b, l_quat_b, \
-    #         r_pos_b, r_quat_b = self._teleop.get_latest()
-
-    #     if seq < 0:
-    #         return torch.zeros(self.num_envs, 12, device=self.device)
-
-    #     # ---- pack positions (already root frame) ----
-    #     pos_sel_b = torch.stack([l_pos_b, r_pos_b], dim=0).to(self.device)   # [2, 3]
-    #     pos_sel_b = pos_sel_b.unsqueeze(0).expand(self.num_envs, -1, -1)     # [N, 2, 3]
-
-    #     # ---- pack orientations (already root-relative) ----
-    #     quat_sel_b = torch.stack([l_quat_b, r_quat_b], dim=0).to(self.device)  # [2, 4]
-    #     # optional safety normalize
-    #     quat_sel_b = quat_sel_b / (torch.norm(quat_sel_b, dim=-1, keepdim=True) + 1e-8)
-    #     quat_sel_b = quat_sel_b.unsqueeze(0).expand(self.num_envs, -1, -1)     # [N, 2, 4]
-
-    #     axis_ang_b = axis_angle_from_quat(quat_sel_b)                          # [N, 2, 3]
-
-    #     out = torch.cat(
-    #         [pos_sel_b.reshape(self.num_envs, -1),   # [N, 6]
-    #          axis_ang_b.reshape(self.num_envs, -1)], # [N, 6]
-    #         dim=-1
-    #     )  # [N, 12]
-
-    #     # debug
-    #     # print(f"[DEBUG] seq={seq} out0={out[0].detach().cpu().tolist()}", flush=True)
-    #     return out
-
     def head_and_wrist_6d_sym(self):
         # build symmetry for the three selected bodies (head, left hand, right hand)
         # Must match the order used in `head_and_wrist_6d` (head, left_hand, right_hand).
@@ -1969,8 +1982,7 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
             sym_utils.SymmetryTransform(perm=torch.arange(1), signs=[1]),        # force_limit: no change
         ])
 
-    @observation
-    def command(self):
+    def _command_from_motion(self):
         """
         Simplified command observation for velocity tracking + EE reaching tasks.
         Only provides next frame target (future step 1), not full trajectory.
@@ -2019,118 +2031,86 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         
         return out
 
-    # @observation
-    # def command(self):
-    #     """
-    #     Simplified command observation for teleop mode.
-    #     Only provides next frame target (same as training command).
-        
-    #     Output format (6 dimensions, matches training):
-    #     - root_height: [N, 1] - current frame root height
-    #     - target_linvel_b: [N, 2] - target xy linear velocity in body frame
-    #     - target_heading_b: [N, 2] - target heading direction in body frame
-    #     - force_safe_limit: [N, 1] - force limit
-        
-    #     Total: 1 + 2 + 2 + 1 = 6 dimensions
-        
-    #     UDP teleop data format:
-    #     - root_pos(3): root xy position used for velocity command (z is height)
-    #     - root_quat(4): root orientation used for heading direction
-    #     """
-        
-    #     # Default values
-    #     root_height = torch.full((self.num_envs, 1), 0.79, device=self.device)  # [N, 1]
-    #     target_linvel_b_xy = torch.zeros(self.num_envs, 2, device=self.device)  # [N, 2]
-    #     target_heading_b_xy = torch.zeros(self.num_envs, 2, device=self.device)  # [N, 2]
-    #     target_heading_b_xy[:, 0] = 1.0  # default: face forward [1, 0]
-        
-    #     # UDP teleop control
-    #     if hasattr(self, "_teleop") and self._teleop is not None:
-    #         seq, t_recv, \
-    #             root_pos, root_quat, \
-    #             head_pos_b, head_quat_b, \
-    #             l_pos_b, l_quat_b, \
-    #             r_pos_b, r_quat_b = self._teleop.get_latest()
-            
-    #         if seq >= 0:
-    #             # ---- Target heading from root_quat ----
-    #             # UDP sends quaternion in (x, y, z, w) format, but yaw_quat expects (w, x, y, z)
-    #             # Convert from (x, y, z, w) to (w, x, y, z)
-    #             root_quat_xyzw = root_quat.to(self.device)  # [4] in (x, y, z, w) format
-    #             root_quat_wxyz = torch.stack([
-    #                 root_quat_xyzw[3],  # w
-    #                 root_quat_xyzw[0],  # x
-    #                 root_quat_xyzw[1],  # y
-    #                 root_quat_xyzw[2],  # z
-    #             ], dim=-1)  # [4] in (w, x, y, z) format
-    #             root_quat_wxyz = root_quat_wxyz / (torch.norm(root_quat_wxyz) + 1e-8)  # normalize
-    #             target_yaw_quat = yaw_quat(root_quat_wxyz.unsqueeze(0))  # [1, 4] target yaw in world frame
-    #             target_yaw_quat = target_yaw_quat.expand(self.num_envs, -1)  # [N, 4]
-                
-    #             # Get current robot yaw for body frame conversion
-    #             current_yaw_quat = yaw_quat(self.asset.data.root_quat_w)  # [N, 4]
-                
-    #             # Target heading in world frame (x-axis of target frame)
-    #             heading_vec = torch.tensor([1.0, 0.0, 0.0], device=self.device)
-    #             target_heading_w = quat_apply(target_yaw_quat, heading_vec.unsqueeze(0).expand(self.num_envs, -1))  # [N, 3]
-                
-    #             # Convert heading to current robot's body frame
-    #             target_heading_b = quat_apply_inverse(current_yaw_quat, target_heading_w)  # [N, 3]
-    #             target_heading_b_xy = target_heading_b[:, :2]  # [N, 2]
-                
-    #             # ---- Target linear velocity from root_pos xy ----
-    #             # root_pos xy is the velocity command in TARGET HEADING frame (relative to target orientation)
-    #             # First transform to world frame using target yaw, then to current robot body frame
-    #             # Note: negate the input to match control direction
-    #             vel_scale = 1.0  # adjust this for sensitivity
-    #             vel_in_target_frame = torch.zeros(self.num_envs, 3, device=self.device)  # [N, 3]
-    #             vel_in_target_frame[:, 0] = -root_pos[0].to(self.device) * vel_scale  # forward in target frame (negated)
-    #             vel_in_target_frame[:, 1] = -root_pos[1].to(self.device) * vel_scale  # left in target frame (negated)
-    #             # z stays 0
-                
-    #             # Transform: target frame -> world frame -> current body frame
-    #             target_linvel_w = quat_apply(target_yaw_quat, vel_in_target_frame)  # [N, 3] in world
-    #             target_linvel_b = quat_apply_inverse(current_yaw_quat, target_linvel_w)  # [N, 3] in body
-    #             target_linvel_b_xy = target_linvel_b[:, :2]  # [N, 2]
-                
-    #             # ---- Root height from root_pos z (optional) ----
-    #             if root_pos[2] > 0.1:  # if z is meaningful (> 0.1m)
-    #                 root_height = torch.full((self.num_envs, 1), root_pos[2].item(), device=self.device)
-                
-    #             # Debug print (occasional)
-    #             if hasattr(self, "_command_udp_counter"):
-    #                 self._command_udp_counter += 1
-    #             else:
-    #                 self._command_udp_counter = 0
-                
-    #             if self._command_udp_counter % 200 == 0:
-    #                 print(f"[command UDP] seq={seq}, "
-    #                       f"vel_target_frame=[{root_pos[0].item():.2f}, {root_pos[1].item():.2f}], "
-    #                       f"linvel_b={target_linvel_b_xy[0].tolist()}, "
-    #                       f"heading_b={target_heading_b_xy[0].tolist()}", flush=True)
-        
-    #     # Force safe limit
-    #     force_limit = self.force_safe_limit_tl.current  # [N, 1]
+    def _command_from_udp(self):
+        """
+        Simplified command observation for teleop mode.
 
-    #     # # default zero command for teleop
-    #     # # Get current root height
-    #     # root_height = self._motion.root_pos_w[:, 0, 2:3]  # [N, 1]
-    #     # # Target linear velocity = 0 for teleop (motion comes from UDP input)
-    #     # target_linvel_b_xy = torch.zeros(self.num_envs, 2, device=self.device)  # [N, 2]
-    #     # # Target heading = [1, 0] (face forward, no rotation)
-    #     # target_heading_b_xy = torch.zeros(self.num_envs, 2, device=self.device)  # [N, 2]
-    #     # target_heading_b_xy[:, 0] = 1.0  # x = 1, y = 0
-    #     # # Force safe limit
-    #     # force_limit = self.force_safe_limit_tl.current  # [N, 1]
-        
-    #     out = torch.cat([
-    #         root_height,           # [N, 1]
-    #         target_linvel_b_xy,    # [N, 2]
-    #         target_heading_b_xy,   # [N, 2]
-    #         force_limit            # [N, 1]
-    #     ], dim=-1)  # [N, 6]
-        
-    #     return out
+        Output format matches _command_from_motion:
+        root_height(1), target_linvel_b_xy(2), target_heading_b_xy(2), force_limit(1).
+        """
+        root_height = torch.full((self.num_envs, 1), 0.79, device=self.device)
+        target_linvel_b_xy = torch.zeros(self.num_envs, 2, device=self.device)
+        target_heading_b_xy = torch.zeros(self.num_envs, 2, device=self.device)
+        target_heading_b_xy[:, 0] = 1.0
+
+        if self._teleop is not None:
+            seq, _t_recv, \
+                root_pos, root_quat, \
+                _head_pos_b, _head_quat_b, \
+                _l_pos_b, _l_quat_b, \
+                _r_pos_b, _r_quat_b = self._teleop.get_latest()
+
+            if seq >= 0:
+                root_quat_xyzw = root_quat.to(self.device)
+                root_quat_wxyz = torch.stack([
+                    root_quat_xyzw[3],
+                    root_quat_xyzw[0],
+                    root_quat_xyzw[1],
+                    root_quat_xyzw[2],
+                ], dim=-1)
+                root_quat_wxyz = root_quat_wxyz / (torch.norm(root_quat_wxyz) + 1e-8)
+                target_yaw_quat = yaw_quat(root_quat_wxyz.unsqueeze(0))
+                target_yaw_quat = target_yaw_quat.expand(self.num_envs, -1)
+
+                current_yaw_quat = yaw_quat(self.asset.data.root_quat_w)
+                heading_vec = torch.tensor([1.0, 0.0, 0.0], device=self.device)
+                target_heading_w = quat_apply(
+                    target_yaw_quat,
+                    heading_vec.unsqueeze(0).expand(self.num_envs, -1),
+                )
+                target_heading_b = quat_apply_inverse(current_yaw_quat, target_heading_w)
+                target_heading_b_xy = target_heading_b[:, :2]
+
+                vel_scale = 1.0
+                vel_in_target_frame = torch.zeros(self.num_envs, 3, device=self.device)
+                vel_in_target_frame[:, 0] = -root_pos[0].to(self.device) * vel_scale
+                vel_in_target_frame[:, 1] = -root_pos[1].to(self.device) * vel_scale
+                target_linvel_w = quat_apply(target_yaw_quat, vel_in_target_frame)
+                target_linvel_b = quat_apply_inverse(current_yaw_quat, target_linvel_w)
+                target_linvel_b_xy = target_linvel_b[:, :2]
+
+                if root_pos[2] > 0.1:
+                    root_height = torch.full((self.num_envs, 1), root_pos[2].item(), device=self.device)
+
+                self._command_udp_counter = getattr(self, "_command_udp_counter", -1) + 1
+                if self._command_udp_counter % 200 == 0:
+                    print(
+                        f"[command UDP] seq={seq}, "
+                        f"vel_target_frame=[{root_pos[0].item():.2f}, {root_pos[1].item():.2f}], "
+                        f"linvel_b={target_linvel_b_xy[0].tolist()}, "
+                        f"heading_b={target_heading_b_xy[0].tolist()}",
+                        flush=True,
+                    )
+
+        force_limit = self.force_safe_limit_tl.current
+        return torch.cat([
+            root_height,
+            target_linvel_b_xy,
+            target_heading_b_xy,
+            force_limit,
+        ], dim=-1)
+
+    @observation
+    def command(self):
+        if not hasattr(self, "_printed_command_source"):
+            print(
+                f"[MotionTrackingCommand] command source={self.teleop_obs_source}",
+                flush=True,
+            )
+            self._printed_command_source = True
+        if self.teleop_obs_source == "udp":
+            return self._command_from_udp()
+        return self._command_from_motion()
 
     @observation
     def force_priv(self):

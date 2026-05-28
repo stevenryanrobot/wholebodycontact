@@ -30,6 +30,9 @@ flags: []
 command:
   _target_: active_adaptation.envs.mdp.commands.motion_tracking.MotionTrackingCommand_impedance
   student_train: True
+  teleop:
+    enabled: False
+    obs_source: motion
   max_force: 120.0
   net_force_limit: 120.0
   net_torque_limit: 20.0
