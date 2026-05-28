@@ -681,6 +681,24 @@ class MotionTrackingCommand(Command):
         
         return sym_utils.SymmetryTransform(perm=perm, signs=signs)
 
+    @observation
+    def feet_pos_b(self):
+        motion = self._motion
+        if hasattr(motion, "local_body_pos"):
+            target_feet_b = motion.local_body_pos[:, 0, self.feet_idx_motion, :]
+        elif hasattr(motion, "body_pos_b"):
+            target_feet_b = motion.body_pos_b[:, 0, self.feet_idx_motion, :]
+        else:
+            return torch.zeros(self.num_envs, 6, device=self.device)
+        return target_feet_b.reshape(self.num_envs, -1)
+
+    def feet_pos_b_sym(self):
+        return sym_utils.cartesian_space_symmetry(
+            self.asset,
+            get_items_by_index(self.asset.body_names, self.feet_idx_asset),
+            sign=[1, -1, 1],
+        )
+
 
     @observation
     def head_and_wrist_6d(self):
@@ -926,6 +944,25 @@ class MotionTrackingCommand(Command):
         diff = target_wrist_b - actual_wrist_b
         error = diff.norm(dim=-1).mean(dim=-1, keepdim=True)  # [N, 1]
         return _calc_exp_sigma(error, self.reward_sigma["ee"])
+
+    @reward
+    def feet_tracking(self):
+        motion = self._motion
+        if hasattr(motion, "local_body_pos"):
+            target_feet_b = motion.local_body_pos[:, 0, self.feet_idx_motion, :]
+        elif hasattr(motion, "body_pos_b"):
+            target_feet_b = motion.body_pos_b[:, 0, self.feet_idx_motion, :]
+        else:
+            return torch.zeros(self.num_envs, 1, device=self.device)
+
+        actual_feet_w = self.asset.data.body_pos_w[:, self.feet_idx_asset, :]
+        root_pos = self.asset.data.root_pos_w.unsqueeze(1)
+        root_quat = self.asset.data.root_quat_w.unsqueeze(1)
+        actual_feet_b = quat_apply_inverse(root_quat, actual_feet_w - root_pos)
+
+        diff = target_feet_b - actual_feet_b
+        error = diff.norm(dim=-1).mean(dim=-1, keepdim=True)
+        return _calc_exp_sigma(error, self.reward_sigma["feet"])
 
     @reward
     def joint_pos_tracking(self):

@@ -40,6 +40,7 @@ command:
       # - interx
       # - lafan
       # - amass_full_safe
+      # - amass_full_safe_hand
       - amass
     path_weights:
       # - 0.4
@@ -62,6 +63,7 @@ command:
     keypoint: [0.3] # product
     lower_keypoint: [0.3] # product
     ee: [0.2] # end-effector (wrist) tracking
+    feet: [0.2] # feet position tracking
 
     force_target: [0.3] # product
     force_target_vel: [1.0, 0.5] # product
@@ -76,6 +78,7 @@ observation:
     command: {}
     # head_and_wrist_6d: {}
     root_and_wrist_6d: {}
+    feet_pos_b: {}
     # target_pos_b_obs: {}
     # target_linvel_b_obs: {}
     # relative_quat_obs: {}
@@ -136,6 +139,7 @@ reward:
     joint_pos_tracking:    {weight: 1.0}
     joint_vel_tracking:    {weight: 0.5}
     ee_tracking:           {weight: 2.0}
+    feet_tracking:         {weight: 2.0}
   loco:
     survival:           {weight: 5.0, enabled: true}
     impact_force_l2:    {weight: 4.0, enabled: true, body_names: .*ankle_roll_link}
