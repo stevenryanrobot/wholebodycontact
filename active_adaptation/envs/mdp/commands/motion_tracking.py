@@ -2095,3 +2095,36 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         # self.env.debug_draw.point(
         #     act1.reshape(-1, 3), color=(0, 0, 1, 1), size=10.0
         # )
+
+
+class RootCommandMotionTrackingCommand_impedance(MotionTrackingCommand_impedance):
+    """Motion-tracking command variant whose root command is supplied externally."""
+
+    def __init__(
+        self,
+        env,
+        *args,
+        nominal_root_height: float = 0.79,
+        **kwargs,
+    ):
+        super().__init__(env, *args, **kwargs)
+        self.nominal_root_height = nominal_root_height
+        self.root_command = torch.zeros(self.num_envs, 5, device=self.device)
+        self.root_command[:, 0] = self.nominal_root_height
+        self.root_command[:, 3] = 1.0
+
+    def reset(self, env_ids):
+        super().reset(env_ids)
+        self.root_command[env_ids] = 0.0
+        self.root_command[env_ids, 0] = self.nominal_root_height
+        self.root_command[env_ids, 3] = 1.0
+
+    def set_root_command(self, command: torch.Tensor):
+        if command.shape[-1] != 5:
+            raise ValueError(f"Root command must have 5 dims, got {command.shape[-1]}.")
+        self.root_command[:] = command
+
+    @observation
+    def command(self):
+        force_limit = self.force_safe_limit_tl.current
+        return torch.cat([self.root_command, force_limit], dim=-1)

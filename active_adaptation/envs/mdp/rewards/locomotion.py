@@ -280,6 +280,35 @@ class joint_pos_limits(Reward):
         violation_max = (jpos - self.soft_limits[..., 1]).clamp_min(0.0)
         return -(violation_min + violation_max).sum(1, keepdim=True) / (1-self.soft_factor)
 
+
+class root_position_hold(Reward):
+    def __init__(
+        self,
+        env,
+        weight: float,
+        sigma: float = 0.25,
+        mode: str = "xy",
+        enabled: bool = True,
+    ):
+        super().__init__(env, weight, enabled)
+        if mode not in ("xy", "xyz"):
+            raise ValueError(f"Unsupported root_position_hold mode: {mode}")
+        self.asset: Articulation = self.env.scene["robot"]
+        self.sigma = sigma
+        self.mode = mode
+        self.root_pos_ref = torch.zeros(self.num_envs, 3, device=self.device)
+
+    def reset(self, env_ids: torch.Tensor):
+        self.root_pos_ref[env_ids] = self.asset.data.root_pos_w[env_ids]
+
+    def compute(self) -> torch.Tensor:
+        diff = self.asset.data.root_pos_w - self.root_pos_ref
+        if self.mode == "xy":
+            error = diff[:, :2].norm(dim=-1, keepdim=True)
+        else:
+            error = diff.norm(dim=-1, keepdim=True)
+        return torch.exp(-error / self.sigma)
+
 @reward_func
 def action_rate_l2(self):
     action_diff = self.action_manager.action_buf[:, :, 0] - self.action_manager.action_buf[:, :, 1]
