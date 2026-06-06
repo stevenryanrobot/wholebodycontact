@@ -89,6 +89,16 @@ class fall_over(Termination):
         fall_over = (self.asset.data.projected_gravity_b[:, :2].norm(dim=1, keepdim=True) >= self.xy_thres) | (-self.asset.data.projected_gravity_b[:, 2:] < self.z_thres)
         return fall_over
 
+
+class root_height_below(Termination):
+    def __init__(self, env, min_height: float = 0.55):
+        super().__init__(env)
+        self.asset: Articulation = self.env.scene["robot"]
+        self.min_height = min_height
+
+    def __call__(self):
+        return self.asset.data.root_pos_w[:, 2:3] < self.min_height
+
 class cum_error(Termination):
     def __init__(self, env, thres: float = 0.85, min_steps: int = 50):
         super().__init__(env)

@@ -15,7 +15,7 @@ action:
   _recursive_: False
   command_dim: 5
   nominal_root_height: 0.79
-  command_scale: [0.20, 0.8, 0.8, 1.0, 1.0]
+  command_scale: [0.10, 0.3, 0.3, 0.3, 0.3]
   low_policy_command_slice: [1, 7]
   low_policy_obs_key: low_policy
   low_policy:
@@ -49,6 +49,7 @@ observation:
   hl_policy:
     boot_indicator_state: {}
     command: {}
+    force_priv: {}
     root_and_wrist_6d: {}
     feet_pos_b: {}
     root_ang_vel_history:      {history_steps: [0], noise_std: 0.05}
@@ -105,7 +106,11 @@ reward:
   root_hold:
     root_position_hold: {weight: 5.0, sigma: 0.25, mode: xy}
     root_height_hold: {weight: 3.0, sigma: 0.08, target_height: 0.79}
+  regularization:
+    high_action_l2: {weight: 0.02}
+    high_action_rate_l2: {weight: 0.10}
 
 termination:
   fall_over: {xy_thres: 0.8, z_thres: 0.5}
+  root_height_below: {min_height: 0.55}
   cum_error: {thres: 999.0, min_steps: 50}

@@ -337,6 +337,23 @@ class root_height_hold(Reward):
 
 
 @reward_func
+def high_action_l2(self):
+    action_buf = getattr(self.action_manager, "high_action_buf", None)
+    if action_buf is None:
+        return torch.zeros(self.num_envs, 1, device=self.device)
+    return -action_buf[:, 0].square().sum(dim=-1, keepdim=True)
+
+
+@reward_func
+def high_action_rate_l2(self):
+    action_buf = getattr(self.action_manager, "high_action_buf", None)
+    if action_buf is None or action_buf.shape[1] < 2:
+        return torch.zeros(self.num_envs, 1, device=self.device)
+    action_diff = action_buf[:, 0] - action_buf[:, 1]
+    return -action_diff.square().sum(dim=-1, keepdim=True)
+
+
+@reward_func
 def action_rate_l2(self):
     action_diff = self.action_manager.action_buf[:, :, 0] - self.action_manager.action_buf[:, :, 1]
     return - action_diff.square().sum(dim=-1, keepdim=True)

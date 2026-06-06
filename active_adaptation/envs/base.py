@@ -432,20 +432,23 @@ class _Env(EnvBase):
             for callback in self._pre_step_callbacks:
                 callback(substep)
 
-            # # deal with custom force apply logic
-            # if hasattr(self.command_manager, "force_apply_world") and self.command_manager.force_apply_world:
-            #     asset = self.command_manager.asset
-            #     force = self.command_manager.force_apply_buffer
-            #     torque = self.command_manager.torque_apply_buffer if hasattr(self.command_manager, "torque_apply_buffer") else None
-            #     position = self.command_manager.position_apply_buffer if hasattr(self.command_manager, "position_apply_buffer") else None
-            #     physx = asset.root_physx_view
-            #     physx.apply_forces_and_torques_at_position(
-            #         force_data=force,
-            #         torque_data=torque,
-            #         position_data=position,
-            #         indices=asset._ALL_INDICES,
-            #         is_global=True,
-            #     )
+            # Deal with custom world-frame force apply logic from command managers.
+            if getattr(self.command_manager, "force_apply_world", False):
+                asset = self.command_manager.asset
+                force = self.command_manager.force_apply_buffer.view(-1, 3)
+                torque = getattr(self.command_manager, "torque_apply_buffer", None)
+                position = getattr(self.command_manager, "position_apply_buffer", None)
+                if torque is not None:
+                    torque = torque.view(-1, 3)
+                if position is not None:
+                    position = position.view(-1, 3)
+                asset.root_physx_view.apply_forces_and_torques_at_position(
+                    force_data=force,
+                    torque_data=torque,
+                    position_data=position,
+                    indices=asset._ALL_INDICES,
+                    is_global=True,
+                )
 
             self.scene.write_data_to_sim()
 
