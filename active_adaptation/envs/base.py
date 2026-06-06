@@ -298,6 +298,10 @@ class _Env(EnvBase):
 
         self.termination_funcs = OrderedDict()
         for key, params in self.cfg.termination.items():
+            params = dict(params) if params is not None else {}
+            enabled = params.pop("enabled", True)
+            if enabled is False:
+                continue
             term_func = TERM_FUNCS[key](self, **params)
             self.termination_funcs[key] = term_func
             self._update_callbacks.append(term_func.update)
