@@ -309,6 +309,33 @@ class root_position_hold(Reward):
             error = diff.norm(dim=-1, keepdim=True)
         return torch.exp(-error / self.sigma)
 
+
+class root_height_hold(Reward):
+    def __init__(
+        self,
+        env,
+        weight: float,
+        sigma: float = 0.08,
+        target_height: float | None = None,
+        enabled: bool = True,
+    ):
+        super().__init__(env, weight, enabled)
+        self.asset: Articulation = self.env.scene["robot"]
+        self.sigma = sigma
+        self.target_height = target_height
+        self.root_height_ref = torch.zeros(self.num_envs, 1, device=self.device)
+
+    def reset(self, env_ids: torch.Tensor):
+        if self.target_height is None:
+            self.root_height_ref[env_ids] = self.asset.data.root_pos_w[env_ids, 2:3]
+        else:
+            self.root_height_ref[env_ids] = self.target_height
+
+    def compute(self) -> torch.Tensor:
+        error = (self.asset.data.root_pos_w[:, 2:3] - self.root_height_ref).abs()
+        return torch.exp(-error / self.sigma)
+
+
 @reward_func
 def action_rate_l2(self):
     action_diff = self.action_manager.action_buf[:, :, 0] - self.action_manager.action_buf[:, :, 1]
