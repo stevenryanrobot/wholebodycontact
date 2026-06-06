@@ -2073,14 +2073,21 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
     def debug_draw(self):
         super().debug_draw()
         pos = self.asset.data.body_pos_w[:, self.force_apply_idx_asset, :]
-        force = self.force_applied_w.clone()
-        pos_flat   = pos.reshape(-1, 3)
-        force_flat = force.reshape(-1, 3)
+        root_yaw = yaw_quat(self.asset.data.root_quat_w).unsqueeze(1)
+        force_root_heading_w = quat_apply(root_yaw, self.force_applied_b)
+        force_vis = clamp_norm(force_root_heading_w * 0.02, max=0.6)
+        active_force = self.force_applied_w.norm(dim=-1) > 1e-3
 
-        # self.env.debug_draw.vector(
-        #     pos_flat, force_flat * 0.2,
-        #     color=(0.0, 0.0, 1.0, 1.0)
-        # )
+        if active_force.any():
+            pos_flat = pos[active_force].reshape(-1, 3)
+            force_flat = force_vis[active_force].reshape(-1, 3)
+            self.env.debug_draw.vector(
+                pos_flat, force_flat,
+                color=(1.0, 0.0, 1.0, 1.0), size=4.0
+            )
+            self.env.debug_draw.point(
+                pos_flat, color=(1.0, 0.0, 1.0, 1.0), size=8.0
+            )
 
         # act1 = self.asset.data.body_pos_w[:, self.force_apply_idx_asset, :].reshape(-1, 3)
         # tar1 = self.force_keypoint_w.reshape(-1, 3)
