@@ -251,6 +251,7 @@ class HierarchicalRootCommand(ActionManager):
             self.high_action_buf[:, 0, :] = raw_action
 
             self.root_command[:] = self._decode_root_command(raw_action)
+            # self.root_command[:] = torch.tensor([self.nominal_root_height, 0.0, 0.0, 1.0, 0.0], device=self.device)
             if not hasattr(self.env.command_manager, "set_root_command"):
                 raise RuntimeError(
                     "HierarchicalRootCommand requires a command manager with set_root_command()."
@@ -258,11 +259,15 @@ class HierarchicalRootCommand(ActionManager):
             self.env.command_manager.set_root_command(self.root_command)
             low_td = tensordict.clone()
             if self.low_policy_obs_key is not None and self.low_policy_obs_key in low_td.keys():
-                low_td["policy"] = low_td[self.low_policy_obs_key].clone()
+                if self.low_policy_obs_key in self.env.observation_funcs:
+                    low_td["policy"] = self.env.observation_funcs[self.low_policy_obs_key]._compute()
+                else:
+                    low_td["policy"] = low_td[self.low_policy_obs_key].clone()
             if self.low_policy_command_slice is not None:
                 command = self.env.command_manager.command()
                 start, stop = self.low_policy_command_slice
                 low_td["policy"][:, start:stop] = command
+                # low_td["policy"][:, stop:stop + 12] = torch.tensor([0.15, 0.1, 0.0, 0.15, -0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], device=self.device)
             self.low_action[:] = self.low_policy.act(low_td)
 
         low_td = tensordict.clone()

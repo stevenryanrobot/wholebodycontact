@@ -96,7 +96,8 @@ def main():
         OmegaConf.set_struct(cfg, False)
 
         cfg["checkpoint_path"] = os.path.join(root, checkpoint.name)
-        cfg["vecnorm"] = "eval"
+        if cfg.get("vecnorm", None) is not None:
+            cfg["vecnorm"] = "eval"
 
     elif args.checkpoint:
         # Load from local checkpoint with default config

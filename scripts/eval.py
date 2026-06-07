@@ -76,7 +76,8 @@ def main():
     OmegaConf.set_struct(cfg, False)
 
     cfg["checkpoint_path"] = os.path.join(root, checkpoint.name)
-    cfg["vecnorm"] = "eval"
+    if cfg.get("vecnorm", None) is not None:
+        cfg["vecnorm"] = "eval"
 
     if args.teleop:
         cfg["task"]["command"]["teleop"] = True
