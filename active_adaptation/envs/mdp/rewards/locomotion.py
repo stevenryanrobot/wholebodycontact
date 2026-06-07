@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Callable, List, Tuple
 
 import isaaclab.utils.string as string_utils
 from isaaclab.utils.string import resolve_matching_names
-from active_adaptation.utils.math import quat_apply, quat_apply_inverse, yaw_quat, normalize
+from active_adaptation.utils.math import quat_apply, quat_apply_inverse, yaw_quat, normalize, clamp_norm
 from ..commands import *
 
 if TYPE_CHECKING:
@@ -307,6 +307,43 @@ class root_position_hold(Reward):
             error = diff[:, :2].norm(dim=-1, keepdim=True)
         else:
             error = diff.norm(dim=-1, keepdim=True)
+        return torch.exp(-error / self.sigma)
+
+
+class root_force_spring_tracking(Reward):
+    def __init__(
+        self,
+        env,
+        weight: float,
+        stiffness: float = 400.0,
+        sigma: float = 0.25,
+        max_offset: float = 0.5,
+        force_deadband: float = 5.0,
+        enabled: bool = True,
+    ):
+        super().__init__(env, weight, enabled)
+        self.asset: Articulation = self.env.scene["robot"]
+        self.stiffness = stiffness
+        self.sigma = sigma
+        self.max_offset = max_offset
+        self.force_deadband = force_deadband
+        self.root_pos_ref = torch.zeros(self.num_envs, 2, device=self.device)
+
+    def reset(self, env_ids: torch.Tensor):
+        self.root_pos_ref[env_ids] = self.asset.data.root_pos_w[env_ids, :2]
+
+    def compute(self) -> torch.Tensor:
+        force_buffer = getattr(self.env.command_manager, "force_apply_buffer", None)
+        if force_buffer is None:
+            target_offset_xy = torch.zeros(self.num_envs, 2, device=self.device)
+        else:
+            force_xy = force_buffer.sum(dim=1)[:, :2]
+            force_norm = force_xy.norm(dim=-1, keepdim=True)
+            force_xy = torch.where(force_norm > self.force_deadband, force_xy, torch.zeros_like(force_xy))
+            target_offset_xy = clamp_norm(force_xy / self.stiffness, max=self.max_offset)
+
+        target_xy = self.root_pos_ref + target_offset_xy
+        error = (self.asset.data.root_pos_w[:, :2] - target_xy).norm(dim=-1, keepdim=True)
         return torch.exp(-error / self.sigma)
 
 

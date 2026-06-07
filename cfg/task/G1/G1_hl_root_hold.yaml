@@ -9,13 +9,16 @@ command:
   nominal_root_height: 0.79
   student_train: True
   disable_motion_finish: True
+  max_force: 200.0
+  net_force_limit: 200.0
+  net_torque_limit: 35.0
 
 action:
   _target_: active_adaptation.envs.mdp.action.HierarchicalRootCommand
   _recursive_: False
   command_dim: 5
   nominal_root_height: 0.79
-  command_scale: [0.10, 0.3, 0.3, 0.3, 0.3]
+  command_scale: [0.15, 0.5, 0.5, 0.6, 0.6]
   low_policy_command_slice: [1, 7]
   low_policy_obs_key: low_policy
   low_policy:

@@ -1,0 +1,10 @@
+name: G1HLFORCEWALK
+
+defaults:
+  - /task/G1/G1_hl_root_hold@_here_
+  - _self_
+
+reward:
+  root_hold:
+    root_position_hold: {weight: 0.0, sigma: 0.25, mode: xy, enabled: false}
+    root_force_spring_tracking: {weight: 5.0, stiffness: 400.0, sigma: 0.25, max_offset: 0.5, force_deadband: 5.0}
