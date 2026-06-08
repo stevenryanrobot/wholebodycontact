@@ -347,6 +347,75 @@ class root_force_spring_tracking(Reward):
         return torch.exp(-error / self.sigma)
 
 
+class root_force_velocity_tracking(Reward):
+    def __init__(
+        self,
+        env,
+        weight: float,
+        damping: float = 300.0,
+        max_speed: float = 0.6,
+        sigma: float = 0.25,
+        force_deadband: float = 20.0,
+        enabled: bool = True,
+    ):
+        super().__init__(env, weight, enabled)
+        self.asset: Articulation = self.env.scene["robot"]
+        self.damping = damping
+        self.max_speed = max_speed
+        self.sigma = sigma
+        self.force_deadband = force_deadband
+
+    def _net_force_xy(self) -> torch.Tensor:
+        command = self.env.command_manager
+        if getattr(command, "external_force_mode", "legacy") == "net_pull" and hasattr(command, "net_pull_force_w"):
+            return command.net_pull_force_w[:, :2]
+        force_buffer = getattr(command, "force_apply_buffer", None)
+        if force_buffer is None:
+            return torch.zeros(self.num_envs, 2, device=self.device)
+        return force_buffer.sum(dim=1)[:, :2]
+
+    def compute(self) -> torch.Tensor:
+        force_xy = self._net_force_xy()
+        force_norm = force_xy.norm(dim=-1, keepdim=True)
+        active_force_xy = torch.where(force_norm > self.force_deadband, force_xy, torch.zeros_like(force_xy))
+        desired_vel_xy = clamp_norm(active_force_xy / self.damping, max=self.max_speed)
+        vel_error = (self.asset.data.root_lin_vel_w[:, :2] - desired_vel_xy).norm(dim=-1, keepdim=True)
+        return torch.exp(-vel_error / self.sigma)
+
+
+class root_force_direction_progress(Reward):
+    def __init__(
+        self,
+        env,
+        weight: float,
+        target_speed: float = 0.5,
+        force_deadband: float = 20.0,
+        enabled: bool = True,
+    ):
+        super().__init__(env, weight, enabled)
+        self.asset: Articulation = self.env.scene["robot"]
+        self.target_speed = target_speed
+        self.force_deadband = force_deadband
+
+    def _net_force_xy(self) -> torch.Tensor:
+        command = self.env.command_manager
+        if getattr(command, "external_force_mode", "legacy") == "net_pull" and hasattr(command, "net_pull_force_w"):
+            return command.net_pull_force_w[:, :2]
+        force_buffer = getattr(command, "force_apply_buffer", None)
+        if force_buffer is None:
+            return torch.zeros(self.num_envs, 2, device=self.device)
+        return force_buffer.sum(dim=1)[:, :2]
+
+    def compute(self) -> torch.Tensor:
+        force_xy = self._net_force_xy()
+        force_norm = force_xy.norm(dim=-1, keepdim=True)
+        is_active = force_norm > self.force_deadband
+        force_dir = force_xy / force_norm.clamp_min(1e-6)
+        speed_along_force = (self.asset.data.root_lin_vel_w[:, :2] * force_dir).sum(dim=-1, keepdim=True)
+        reward = (speed_along_force / max(self.target_speed, 1e-6)).clamp(0.0, 1.0)
+        return reward, is_active
+
+
 class root_height_hold(Reward):
     def __init__(
         self,

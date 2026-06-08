@@ -1296,6 +1296,14 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         compliance: bool = True,
         net_force_limit: float = 30.0,
         net_torque_limit: float = 20.0,
+        external_force_mode: str = "legacy",
+        net_pull_apply_pattern: Sequence[str] | None = None,
+        net_pull_force_range: Sequence[float] = (80.0, 200.0),
+        net_pull_ramp_up_range: Sequence[int] = (25, 75),
+        net_pull_hold_range: Sequence[int] = (100, 250),
+        net_pull_ramp_down_range: Sequence[int] = (25, 75),
+        net_pull_rest_range: Sequence[int] = (50, 150),
+        net_pull_xy_only: bool = True,
         **kwargs,
     ):
         super().__init__(env, *args, **kwargs)
@@ -1314,6 +1322,9 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         self.net_force_limit  = torch.as_tensor(net_force_limit,  dtype=torch.float32, device=self.device)
         self.net_torque_limit = torch.as_tensor(net_torque_limit, dtype=torch.float32, device=self.device)
         self.compliance = compliance
+        self.external_force_mode = external_force_mode
+        if self.external_force_mode not in ("legacy", "net_pull"):
+            raise ValueError(f"Unsupported external_force_mode: {self.external_force_mode}")
 
         # force origin samples
         current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1422,7 +1433,48 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
 
         self.force_alpha = 1.0
 
+        self.net_pull_apply_pattern = list(net_pull_apply_pattern or [
+            ".*torso.*",
+            ".*shoulder_yaw_link",
+            ".*wrist_roll_link",
+            ".*hand_mimic",
+        ])
+        self.net_pull_force_range = tuple(float(x) for x in net_pull_force_range)
+        self.net_pull_ramp_up_range = tuple(int(x) for x in net_pull_ramp_up_range)
+        self.net_pull_hold_range = tuple(int(x) for x in net_pull_hold_range)
+        self.net_pull_ramp_down_range = tuple(int(x) for x in net_pull_ramp_down_range)
+        self.net_pull_rest_range = tuple(int(x) for x in net_pull_rest_range)
+        self.net_pull_xy_only = net_pull_xy_only
+
         self.configure_admittance()
+        self.configure_net_pull()
+
+    def configure_net_pull(self):
+        self.net_pull_idx_motion, self.net_pull_idx_asset = _match_indices(
+            self.dataset.body_names,
+            self.asset.body_names,
+            self.net_pull_apply_pattern,
+            name_map=self.keypoint_map,
+            device=self.device,
+        )
+        if self.net_pull_idx_asset.numel() == 0:
+            raise ValueError(f"net_pull_apply_pattern matched no bodies: {self.net_pull_apply_pattern}")
+
+        with torch.device(self.device):
+            self.net_pull_num_bodies = self.net_pull_idx_asset.shape[0]
+            self.net_pull_body_local_idx = torch.zeros(self.num_envs, dtype=torch.long)
+            self.net_pull_phase = torch.zeros(self.num_envs, dtype=torch.int32)
+            self.net_pull_phase_timer = torch.zeros(self.num_envs, dtype=torch.int32)
+            self.net_pull_force_dir_w = torch.zeros(self.num_envs, 3, dtype=torch.float32)
+            self.net_pull_force_w = torch.zeros(self.num_envs, 3, dtype=torch.float32)
+            self.net_pull_force_b = torch.zeros(self.num_envs, 3, dtype=torch.float32)
+            self.net_pull_point_b = torch.zeros(self.num_envs, 3, dtype=torch.float32)
+            self.net_pull_force_tl = TemporalLerp(
+                shape=(self.num_envs, 1),
+                device=self.device,
+                easing="linear",
+                clamp=(0.0, self.net_pull_force_range[1]),
+            )
 
     def update_force_kp_matrix(self):
         diag = torch.cat([
@@ -1481,12 +1533,114 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         self.force_kp_ramping_down[env_ids] = False
         self.perturb_force.reset(env_ids, value=0.0)
         self.root_compliance_offset_xy[env_ids] = 0.0
+        self.net_pull_reset(env_ids, refresh_time=refresh_time)
         
         if refresh_time:
             self.force_sample_timer[env_ids] = random_uniform(env_ids.shape[0], 10, 60, self.device).int()
             self.force_safe_limit_tl.reset(env_ids)
             self.force_safe_limit_tl.set(env_ids, start=self.force_safe_default, end=self.force_safe_default, total_steps=1)
             self.force_safe_limit_sample_timer[env_ids] = 0
+
+    def net_pull_reset(self, env_ids: torch.Tensor, refresh_time: bool = True):
+        self.net_pull_phase[env_ids] = 0
+        self.net_pull_force_dir_w[env_ids] = 0.0
+        self.net_pull_force_w[env_ids] = 0.0
+        self.net_pull_force_b[env_ids] = 0.0
+        self.net_pull_point_b[env_ids] = 0.0
+        self.net_pull_force_tl.reset(env_ids, value=torch.zeros(env_ids.shape[0], 1, device=self.device))
+        if refresh_time:
+            self.net_pull_phase_timer[env_ids] = random_uniform(
+                env_ids.shape[0],
+                self.net_pull_rest_range[0],
+                self.net_pull_rest_range[1],
+                self.device,
+            ).int()
+
+    def _sample_net_pull_direction(self, count: int) -> torch.Tensor:
+        if self.net_pull_xy_only:
+            angle = random_uniform(count, 0.0, 2.0 * math.pi, self.device)
+            direction = torch.zeros(count, 3, device=self.device)
+            direction[:, 0] = torch.cos(angle)
+            direction[:, 1] = torch.sin(angle)
+            return direction
+        return normalize(rand_points_isotropic(count, 1, r_max=1.0, device=self.device).squeeze(1))
+
+    def net_pull_schedule(self):
+        self.net_pull_phase_timer -= 1
+        phase_done = self.net_pull_phase_timer < 0
+        if not phase_done.any():
+            return
+
+        env_ids = phase_done.nonzero(as_tuple=False).squeeze(-1)
+        phase_at_done = self.net_pull_phase[env_ids].clone()
+
+        rest_envs = env_ids[phase_at_done == 0]
+        if rest_envs.numel() > 0:
+            self.net_pull_phase[rest_envs] = 1
+            self.net_pull_body_local_idx[rest_envs] = (
+                torch.rand(rest_envs.numel(), device=self.device) * self.net_pull_num_bodies
+            ).floor().long()
+            self.net_pull_force_dir_w[rest_envs] = self._sample_net_pull_direction(rest_envs.numel())
+            force_mag = random_uniform(
+                (rest_envs.numel(), 1),
+                self.net_pull_force_range[0],
+                self.net_pull_force_range[1],
+                self.device,
+            )
+            ramp_steps = random_uniform(
+                rest_envs.numel(),
+                self.net_pull_ramp_up_range[0],
+                self.net_pull_ramp_up_range[1],
+                self.device,
+            ).int()
+            self.net_pull_phase_timer[rest_envs] = ramp_steps
+            self.net_pull_force_tl.set(rest_envs, end=force_mag, total_steps=ramp_steps)
+
+        ramp_up_envs = env_ids[phase_at_done == 1]
+        if ramp_up_envs.numel() > 0:
+            self.net_pull_phase[ramp_up_envs] = 2
+            self.net_pull_phase_timer[ramp_up_envs] = random_uniform(
+                ramp_up_envs.numel(),
+                self.net_pull_hold_range[0],
+                self.net_pull_hold_range[1],
+                self.device,
+            ).int()
+
+        hold_envs = env_ids[phase_at_done == 2]
+        if hold_envs.numel() > 0:
+            self.net_pull_phase[hold_envs] = 3
+            ramp_steps = random_uniform(
+                hold_envs.numel(),
+                self.net_pull_ramp_down_range[0],
+                self.net_pull_ramp_down_range[1],
+                self.device,
+            ).int()
+            self.net_pull_phase_timer[hold_envs] = ramp_steps
+            self.net_pull_force_tl.set(hold_envs, end=0.0, total_steps=ramp_steps)
+
+        ramp_down_envs = env_ids[phase_at_done == 3]
+        if ramp_down_envs.numel() > 0:
+            self.net_pull_phase[ramp_down_envs] = 0
+            self.net_pull_force_dir_w[ramp_down_envs] = 0.0
+            self.net_pull_phase_timer[ramp_down_envs] = random_uniform(
+                ramp_down_envs.numel(),
+                self.net_pull_rest_range[0],
+                self.net_pull_rest_range[1],
+                self.device,
+            ).int()
+
+    def net_pull_update_target(self):
+        force_mag = self.net_pull_force_tl.current
+        self.net_pull_force_w[:] = self.net_pull_force_dir_w * force_mag
+        self.net_pull_force_b[:] = quat_apply_inverse(self.asset.data.root_quat_w, self.net_pull_force_w)
+        self.force_sample_timer[:] = self.net_pull_phase_timer
+
+        body_idx = self.net_pull_idx_asset[self.net_pull_body_local_idx]
+        point_w = self.asset.data.body_pos_w[torch.arange(self.num_envs, device=self.device), body_idx]
+        self.net_pull_point_b[:] = quat_apply_inverse(
+            self.asset.data.root_quat_w,
+            point_w - self.asset.data.root_pos_w,
+        )
     
     def force_schedule(self):
         # procedure:
@@ -1747,7 +1901,7 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         return coef * force_dir
 
     def _limit_net_wrench_about_torso(self):
-        apply_idx = self.force_apply_idx_asset                     # [M]
+        apply_idx = self.net_pull_idx_asset if self.external_force_mode == "net_pull" else self.force_apply_idx_asset
         torso_i   = self.torso_idx_asset
 
         pos_w_6   = self.asset.data.body_pos_w[:, apply_idx, :]    # [N, M, 3]
@@ -1772,14 +1926,14 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         M_allow  = M_net * M_scale
         dM       = M_allow - M_net
 
-        self.force_apply_buffer[:, torso_i,  :] = dF
-        self.torque_apply_buffer[:, torso_i, :] = dM
+        self.force_apply_buffer[:, torso_i,  :].add_(dF)
+        self.torque_apply_buffer[:, torso_i, :].add_(dM)
 
     def force_apply(self, substep):
-        if substep == 0:
-            self.force_applied_w.zero_()
-            self.force_applied_b.zero_()
-            self.force_apply_buffer.zero_()
+        self.force_applied_w.zero_()
+        self.force_applied_b.zero_()
+        self.force_apply_buffer.zero_()
+        self.torque_apply_buffer.zero_()
 
         pos_w = self.asset.data.body_pos_w[:, self.force_apply_idx_asset, :]
         quat_w = self.asset.data.body_quat_w[:, self.force_apply_idx_asset, :]
@@ -1803,6 +1957,11 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
 
     # this function is for baseline (non-compliant perturbation)
     def force_apply_perturb(self, substep: int):
+        self.force_applied_w.zero_()
+        self.force_applied_b.zero_()
+        self.force_apply_buffer.zero_()
+        self.torque_apply_buffer.zero_()
+
         quat_w = self.asset.data.body_quat_w[:, self.force_apply_idx_asset, :]
         self.force_applied_w[:, -2:] = self.perturb_force.current  # [N, 2, 3]
         self.force_applied_b[:] = quat_apply_inverse(
@@ -1818,10 +1977,41 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         self.asset.has_external_wrench = False
         self.force_apply_world = True
 
+    def force_apply_net_pull(self, substep: int):
+        self.force_applied_w.zero_()
+        self.force_applied_b.zero_()
+        self.force_apply_buffer.zero_()
+        self.torque_apply_buffer.zero_()
+
+        body_idx = self.net_pull_idx_asset[self.net_pull_body_local_idx]
+        env_ids = torch.arange(self.num_envs, device=self.device)
+        self.force_apply_buffer[env_ids, body_idx, :] = self.net_pull_force_w
+
+        # Keep legacy-shaped force tensors meaningful for debug paths that sum them.
+        self.force_applied_w.zero_()
+        self.force_applied_b.zero_()
+        legacy_slots = torch.clamp(self.net_pull_body_local_idx, max=self.num_force_bodies - 1)
+        self.force_keypoint_b.zero_()
+        self.force_expected_w.zero_()
+        self.force_expected_b.zero_()
+        self.force_keypoint_b[env_ids, legacy_slots, :] = self.net_pull_point_b
+        self.force_applied_w[env_ids, legacy_slots, :] = self.net_pull_force_w
+        self.force_applied_b[env_ids, legacy_slots, :] = self.net_pull_force_b
+        self.force_expected_w[env_ids, legacy_slots, :] = self.net_pull_force_w
+        self.force_expected_b[env_ids, legacy_slots, :] = self.net_pull_force_b
+
+        self.asset.has_external_wrench = False
+        self.force_apply_world = True
+
     def before_update(self):
         super().before_update()
         self.update_reward_target()
-        if self.compliance:
+        if self.external_force_mode == "net_pull":
+            self.force_safe_limit_tl.update_time()
+            self.net_pull_force_tl.update_time()
+            self.net_pull_schedule()
+            self.net_pull_update_target()
+        elif self.compliance:
             self.force_kp_tl.update_time()
             self.force_origin_tl.update_time()
             self.force_safe_limit_tl.update_time()
@@ -1833,7 +2023,9 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
 
     def step(self, substep: int):
         super().step(substep)
-        if self.compliance:
+        if self.external_force_mode == "net_pull":
+            self.force_apply_net_pull(substep)
+        elif self.compliance:
             self.force_apply(substep)
         elif self.max_force > 0.0:
             self.force_apply_perturb(substep)
@@ -2025,6 +2217,44 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         return sym_utils.SymmetryTransform.cat([
             sym_utils.cartesian_space_symmetry(self.asset,get_items_by_index(self.asset.body_names, self.force_apply_idx_asset), sign=[1, -1, 1]).repeat(3),
             sym_utils.SymmetryTransform(perm=torch.arange(1), signs=[1])
+        ])
+
+    @observation
+    def net_pull_force_priv(self):
+        body_one_hot = torch.zeros(self.num_envs, self.net_pull_num_bodies, device=self.device)
+        body_one_hot.scatter_(1, self.net_pull_body_local_idx.unsqueeze(1), 1.0)
+
+        phase_one_hot = torch.zeros(self.num_envs, 4, device=self.device)
+        phase_idx = self.net_pull_phase.clamp(min=0, max=3).long()
+        phase_one_hot.scatter_(1, phase_idx.unsqueeze(1), 1.0)
+
+        timer = self.net_pull_phase_timer.clamp_min(0).float().unsqueeze(-1) / 250.0
+        force_mag = self.net_pull_force_tl.current / max(self.net_pull_force_range[1], 1e-6)
+        return torch.cat([
+            self.net_pull_point_b,
+            self.net_pull_force_b / max(self.net_pull_force_range[1], 1e-6),
+            self.net_pull_force_w / max(self.net_pull_force_range[1], 1e-6),
+            body_one_hot,
+            phase_one_hot,
+            timer,
+            force_mag,
+        ], dim=-1)
+
+    def net_pull_force_priv_sym(self):
+        body_names = get_items_by_index(self.asset.body_names, self.net_pull_idx_asset)
+        symmetry_mapping = self.asset.cfg.spatial_symmetry_mapping
+        body_perm = torch.zeros(len(body_names), dtype=torch.long)
+        for i, body_name in enumerate(body_names):
+            body_perm[i] = body_names.index(symmetry_mapping[body_name])
+
+        return sym_utils.SymmetryTransform.cat([
+            sym_utils.SymmetryTransform(perm=torch.arange(3), signs=[1, -1, 1]),
+            sym_utils.SymmetryTransform(perm=torch.arange(3), signs=[1, -1, 1]),
+            sym_utils.SymmetryTransform(perm=torch.arange(3), signs=[1, -1, 1]),
+            sym_utils.SymmetryTransform(perm=body_perm, signs=torch.ones(len(body_names))),
+            sym_utils.SymmetryTransform(perm=torch.arange(4), signs=torch.ones(4)),
+            sym_utils.SymmetryTransform(perm=torch.arange(1), signs=[1]),
+            sym_utils.SymmetryTransform(perm=torch.arange(1), signs=[1]),
         ])
 
     @reward

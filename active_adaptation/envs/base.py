@@ -235,7 +235,11 @@ class _Env(EnvBase):
                 raise NotImplementedError
             funcs = OrderedDict()            
             for key, kwargs in params.items():
-                obs = OBS_FUNCS[key](self, **(kwargs if kwargs is not None else {}))
+                kwargs = dict(kwargs) if kwargs is not None else {}
+                enabled = kwargs.pop("enabled", True)
+                if enabled is False:
+                    continue
+                obs = OBS_FUNCS[key](self, **kwargs)
                 funcs[key] = obs
 
                 self._startup_callbacks.append(obs.startup)
