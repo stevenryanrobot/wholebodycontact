@@ -3,8 +3,8 @@ set -euo pipefail
 
 LOW_PROJECT_PATH="${LOW_PROJECT_PATH:-luoxinyuan-duke-university/gentle_humanoid}"
 HL_WANDB_PROJECT="${HL_WANDB_PROJECT:-gentle_humanoid_high_level}"
-export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3}"
-MASTER_PORT="${MASTER_PORT:-29501}"
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-4,5,6,7}"
+MASTER_PORT="${MASTER_PORT:-29502}"
 NPROC="${NPROC:-4}"
 SCRIPT="scripts/train.py"
 TASK="${TASK:-G1/G1_hl_root_hold}"
