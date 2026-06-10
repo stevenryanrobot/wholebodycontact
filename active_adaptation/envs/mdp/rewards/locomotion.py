@@ -442,6 +442,56 @@ class root_height_hold(Reward):
         return torch.exp(-error / self.sigma)
 
 
+class root_velocity_hold(Reward):
+    def __init__(
+        self,
+        env,
+        weight: float,
+        sigma: float = 0.25,
+        enabled: bool = True,
+    ):
+        super().__init__(env, weight, enabled)
+        self.asset: Articulation = self.env.scene["robot"]
+        self.sigma = sigma
+
+    def compute(self) -> torch.Tensor:
+        speed_xy = self.asset.data.root_lin_vel_w[:, :2].norm(dim=-1, keepdim=True)
+        return torch.exp(-speed_xy / self.sigma)
+
+
+class root_command_follow_force_l2(Reward):
+    def __init__(
+        self,
+        env,
+        weight: float,
+        force_deadband: float = 20.0,
+        enabled: bool = True,
+    ):
+        super().__init__(env, weight, enabled)
+        self.force_deadband = force_deadband
+
+    def compute(self) -> torch.Tensor:
+        action_manager = self.env.action_manager
+        command = getattr(action_manager, "root_command", None)
+        if command is None:
+            return torch.zeros(self.num_envs, 1, device=self.device)
+
+        command_vel_b = command[:, 1:3]
+        force_b = getattr(self.env.command_manager, "net_pull_force_b", None)
+        if force_b is None:
+            force_w = getattr(self.env.command_manager, "net_pull_force_w", None)
+            if force_w is None:
+                return torch.zeros(self.num_envs, 1, device=self.device)
+            force_b = quat_apply_inverse(self.env.scene["robot"].data.root_quat_w, force_w)
+
+        force_xy_b = force_b[:, :2]
+        force_norm = force_xy_b.norm(dim=-1, keepdim=True)
+        force_dir_b = force_xy_b / force_norm.clamp_min(1e-6)
+        follow_speed = (command_vel_b * force_dir_b).sum(dim=-1, keepdim=True).clamp_min(0.0)
+        is_active = force_norm > self.force_deadband
+        return -follow_speed.square(), is_active
+
+
 @reward_func
 def high_action_l2(self):
     action_buf = getattr(self.action_manager, "high_action_buf", None)
