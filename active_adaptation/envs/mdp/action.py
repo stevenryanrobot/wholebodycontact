@@ -168,6 +168,7 @@ class HierarchicalRootCommand(ActionManager):
         command_scale: Tuple[float, float, float, float, float] = (0.25, 0.8, 0.8, 1.0, 1.0),
         low_policy_command_slice: Tuple[int, int] | None = (1, 7),
         low_policy_obs_key: str | None = "policy",
+        override_root_command: bool = False,
         **kwargs,
     ):
         super().__init__(env)
@@ -178,6 +179,7 @@ class HierarchicalRootCommand(ActionManager):
         self.command_scale = torch.tensor(command_scale, device=self.device).reshape(1, command_dim)
         self.low_policy_command_slice = tuple(low_policy_command_slice) if low_policy_command_slice is not None else None
         self.low_policy_obs_key = low_policy_obs_key
+        self.override_root_command = override_root_command
 
         self.low_action_manager: JointPosition = hydra.utils.instantiate(low_action, env=env)
         from active_adaptation.learning.hierarchical.frozen_low_level import FrozenLowLevelPolicy
@@ -220,6 +222,11 @@ class HierarchicalRootCommand(ActionManager):
         self.root_command[env_ids, 0] = self.nominal_root_height
         self.root_command[env_ids, 3] = 1.0
 
+    def _set_default_root_command(self):
+        self.root_command[:] = 0.0
+        self.root_command[:, 0] = self.nominal_root_height
+        self.root_command[:, 3] = 1.0
+
     def reset(self, env_ids: torch.Tensor):
         self.low_action_manager.reset(env_ids)
         self.high_action_buf[env_ids] = 0.0
@@ -251,7 +258,8 @@ class HierarchicalRootCommand(ActionManager):
             self.high_action_buf[:, 0, :] = raw_action
 
             self.root_command[:] = self._decode_root_command(raw_action)
-            # self.root_command[:] = torch.tensor([self.nominal_root_height, 0.0, 0.0, 1.0, 0.0], device=self.device)
+            if self.override_root_command:
+                self._set_default_root_command()
             if not hasattr(self.env.command_manager, "set_root_command"):
                 raise RuntimeError(
                     "HierarchicalRootCommand requires a command manager with set_root_command()."

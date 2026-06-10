@@ -29,6 +29,7 @@ def main():
     parser.add_argument("-v", "--video", action="store_true", default=False)
     parser.add_argument("-i", "--iterations", dest="iterations", type=int, default=None)
     parser.add_argument("-s", "--success", action="store_true", default=False)  # test success rate
+    parser.add_argument("--baseline_root_command", action="store_true", default=False)
     args = parser.parse_args()
 
     api = wandb.Api()
@@ -97,6 +98,9 @@ def main():
         if args.command:
             cfg["task"]["command"] = _cfg.task.command
         cfg["task"]["flags"] = _cfg.task.flags
+
+    if args.baseline_root_command:
+        cfg["task"]["action"]["override_root_command"] = True
     
     if args.play:
         if not args.success:

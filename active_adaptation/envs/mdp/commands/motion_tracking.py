@@ -2305,7 +2305,7 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         pos = self.asset.data.body_pos_w[:, self.force_apply_idx_asset, :]
         root_yaw = yaw_quat(self.asset.data.root_quat_w).unsqueeze(1)
         force_root_heading_w = quat_apply(root_yaw, self.force_applied_b)
-        force_vis = clamp_norm(force_root_heading_w * 0.02, max=0.6)
+        force_vis = force_root_heading_w * 0.02
         active_force = self.force_applied_w.norm(dim=-1) > 1e-3
 
         if active_force.any():
