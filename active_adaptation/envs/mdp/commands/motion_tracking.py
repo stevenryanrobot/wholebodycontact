@@ -2351,6 +2351,8 @@ class RootCommandMotionTrackingCommand_impedance(MotionTrackingCommand_impedance
         self.root_command[:, 3] = 1.0
         self.use_root_and_wrist_6d_command = False
         self.root_and_wrist_6d_command = torch.zeros(self.num_envs, 12, device=self.device)
+        self.use_feet_pos_b_command = False
+        self.feet_pos_b_command = torch.zeros(self.num_envs, 6, device=self.device)
 
     def reset(self, env_ids):
         super().reset(env_ids)
@@ -2358,6 +2360,7 @@ class RootCommandMotionTrackingCommand_impedance(MotionTrackingCommand_impedance
         self.root_command[env_ids, 0] = self.nominal_root_height
         self.root_command[env_ids, 3] = 1.0
         self.root_and_wrist_6d_command[env_ids] = self.get_root_and_wrist_6d_reference()[env_ids]
+        self.feet_pos_b_command[env_ids] = self.get_feet_pos_b_reference()[env_ids]
 
     def set_root_command(self, command: torch.Tensor):
         if command.shape[-1] != 5:
@@ -2375,11 +2378,33 @@ class RootCommandMotionTrackingCommand_impedance(MotionTrackingCommand_impedance
         self.use_root_and_wrist_6d_command = True
         self.root_and_wrist_6d_command[:] = command
 
+    def get_feet_pos_b_reference(self):
+        motion = self._motion
+        if hasattr(motion, "local_body_pos"):
+            target_feet_b = motion.local_body_pos[:, 0, self.feet_idx_motion, :]
+        elif hasattr(motion, "body_pos_b"):
+            target_feet_b = motion.body_pos_b[:, 0, self.feet_idx_motion, :]
+        else:
+            return torch.zeros(self.num_envs, 6, device=self.device)
+        return target_feet_b.reshape(self.num_envs, -1)
+
+    def set_feet_pos_b_command(self, command: torch.Tensor):
+        if command.shape[-1] != 6:
+            raise ValueError(f"Feet position command must have 6 dims, got {command.shape[-1]}.")
+        self.use_feet_pos_b_command = True
+        self.feet_pos_b_command[:] = command
+
     @observation
     def root_and_wrist_6d(self):
         if self.use_root_and_wrist_6d_command:
             return self.root_and_wrist_6d_command
         return self.get_root_and_wrist_6d_reference()
+
+    @observation
+    def feet_pos_b(self):
+        if self.use_feet_pos_b_command:
+            return self.feet_pos_b_command
+        return self.get_feet_pos_b_reference()
 
     @observation
     def command(self):
