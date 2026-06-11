@@ -2349,17 +2349,37 @@ class RootCommandMotionTrackingCommand_impedance(MotionTrackingCommand_impedance
         self.root_command = torch.zeros(self.num_envs, 5, device=self.device)
         self.root_command[:, 0] = self.nominal_root_height
         self.root_command[:, 3] = 1.0
+        self.use_root_and_wrist_6d_command = False
+        self.root_and_wrist_6d_command = torch.zeros(self.num_envs, 12, device=self.device)
 
     def reset(self, env_ids):
         super().reset(env_ids)
         self.root_command[env_ids] = 0.0
         self.root_command[env_ids, 0] = self.nominal_root_height
         self.root_command[env_ids, 3] = 1.0
+        self.root_and_wrist_6d_command[env_ids] = self.get_root_and_wrist_6d_reference()[env_ids]
 
     def set_root_command(self, command: torch.Tensor):
         if command.shape[-1] != 5:
             raise ValueError(f"Root command must have 5 dims, got {command.shape[-1]}.")
         self.root_command[:] = command
+
+    def get_root_and_wrist_6d_reference(self):
+        if self.teleop_obs_source == "udp":
+            return self._root_and_wrist_6d_from_udp()
+        return self._root_and_wrist_6d_from_motion()
+
+    def set_root_and_wrist_6d_command(self, command: torch.Tensor):
+        if command.shape[-1] != 12:
+            raise ValueError(f"Root-and-wrist command must have 12 dims, got {command.shape[-1]}.")
+        self.use_root_and_wrist_6d_command = True
+        self.root_and_wrist_6d_command[:] = command
+
+    @observation
+    def root_and_wrist_6d(self):
+        if self.use_root_and_wrist_6d_command:
+            return self.root_and_wrist_6d_command
+        return self.get_root_and_wrist_6d_reference()
 
     @observation
     def command(self):

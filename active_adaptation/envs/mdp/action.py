@@ -166,17 +166,34 @@ class HierarchicalRootCommand(ActionManager):
         command_dim: int = 5,
         nominal_root_height: float = 0.79,
         command_scale: Tuple[float, float, float, float, float] = (0.25, 0.8, 0.8, 1.0, 1.0),
+        ee_command: Dict | None = None,
         low_policy_command_slice: Tuple[int, int] | None = (1, 7),
         low_policy_obs_key: str | None = "policy",
         override_root_command: bool = False,
         **kwargs,
     ):
         super().__init__(env)
-        if command_dim != 5:
-            raise ValueError("HierarchicalRootCommand currently expects command_dim=5.")
-        self.action_dim = command_dim
+        self.root_command_dim = 5
+        self.ee_command_cfg = dict(ee_command or {})
+        self.ee_command_enabled = self.ee_command_cfg.get("enabled", False)
+        self.ee_command_dim = 12 if self.ee_command_enabled else 0
+        expected_command_dim = self.root_command_dim + self.ee_command_dim
+        if command_dim not in (self.root_command_dim, expected_command_dim):
+            raise ValueError(
+                "HierarchicalRootCommand expects command_dim=5 for root-only or "
+                f"{expected_command_dim} when configured components are enabled, got {command_dim}."
+            )
+        self.action_dim = expected_command_dim
         self.nominal_root_height = nominal_root_height
-        self.command_scale = torch.tensor(command_scale, device=self.device).reshape(1, command_dim)
+        self.command_scale = torch.tensor(command_scale, device=self.device).reshape(1, self.root_command_dim)
+        self.ee_pos_scale = torch.tensor(
+            self.ee_command_cfg.get("pos_scale", [0.15, 0.15, 0.15]),
+            device=self.device,
+        ).reshape(1, 1, 3)
+        self.ee_rot_scale = torch.tensor(
+            self.ee_command_cfg.get("rot_scale", [0.5, 0.5, 0.5]),
+            device=self.device,
+        ).reshape(1, 1, 3)
         self.low_policy_command_slice = tuple(low_policy_command_slice) if low_policy_command_slice is not None else None
         self.low_policy_obs_key = low_policy_obs_key
         self.override_root_command = override_root_command
@@ -190,9 +207,11 @@ class HierarchicalRootCommand(ActionManager):
         )
 
         self.high_action_buf = torch.zeros(self.num_envs, 3, self.action_dim, device=self.device)
-        self.root_command = torch.zeros(self.num_envs, self.action_dim, device=self.device)
+        self.root_command = torch.zeros(self.num_envs, self.root_command_dim, device=self.device)
+        self.ee_command = torch.zeros(self.num_envs, self.ee_command_dim, device=self.device)
         self.low_action = torch.zeros(self.num_envs, self.low_action_manager.action_dim, device=self.device)
         self._reset_root_command(torch.arange(self.num_envs, device=self.device))
+        self._reset_ee_command(torch.arange(self.num_envs, device=self.device))
 
     @property
     def joint_ids(self):
@@ -227,13 +246,30 @@ class HierarchicalRootCommand(ActionManager):
         self.root_command[:, 0] = self.nominal_root_height
         self.root_command[:, 3] = 1.0
 
+    def _get_ee_command_reference(self) -> torch.Tensor:
+        if not self.ee_command_enabled:
+            return self.ee_command
+        if hasattr(self.env.command_manager, "get_root_and_wrist_6d_reference"):
+            return self.env.command_manager.get_root_and_wrist_6d_reference()
+        if hasattr(self.env.command_manager, "root_and_wrist_6d"):
+            return self.env.command_manager.root_and_wrist_6d()
+        return torch.zeros(self.num_envs, self.ee_command_dim, device=self.device)
+
+    def _reset_ee_command(self, env_ids: torch.Tensor):
+        if not self.ee_command_enabled:
+            return
+        self.ee_command[env_ids] = self._get_ee_command_reference()[env_ids]
+
     def reset(self, env_ids: torch.Tensor):
         self.low_action_manager.reset(env_ids)
         self.high_action_buf[env_ids] = 0.0
         self.low_action[env_ids] = 0.0
         self._reset_root_command(env_ids)
+        self._reset_ee_command(env_ids)
         if hasattr(self.env.command_manager, "set_root_command"):
             self.env.command_manager.set_root_command(self.root_command)
+        if self.ee_command_enabled and hasattr(self.env.command_manager, "set_root_and_wrist_6d_command"):
+            self.env.command_manager.set_root_and_wrist_6d_command(self.ee_command)
 
     def debug_draw(self):
         self.low_action_manager.debug_draw()
@@ -251,13 +287,26 @@ class HierarchicalRootCommand(ActionManager):
         command[:, 3:5] = heading_xy
         return command
 
+    def _decode_ee_command(self, raw_action: torch.Tensor) -> torch.Tensor:
+        reference = self._get_ee_command_reference()
+        action = torch.tanh(raw_action)
+        pos_delta = action[:, :6].reshape(self.num_envs, 2, 3) * self.ee_pos_scale
+        rot_delta = action[:, 6:12].reshape(self.num_envs, 2, 3) * self.ee_rot_scale
+
+        command = reference.clone()
+        command[:, :6] = reference[:, :6] + pos_delta.reshape(self.num_envs, 6)
+        command[:, 6:12] = reference[:, 6:12] + rot_delta.reshape(self.num_envs, 6)
+        return command
+
     def __call__(self, tensordict: TensorDictBase, substep: int):
         if substep == 0:
             raw_action = tensordict["action"].clamp(-10, 10)
             self.high_action_buf = torch.roll(self.high_action_buf, shifts=1, dims=1)
             self.high_action_buf[:, 0, :] = raw_action
 
-            self.root_command[:] = self._decode_root_command(raw_action)
+            self.root_command[:] = self._decode_root_command(raw_action[:, :self.root_command_dim])
+            if self.ee_command_enabled:
+                self.ee_command[:] = self._decode_ee_command(raw_action[:, self.root_command_dim:])
             if self.override_root_command:
                 self._set_default_root_command()
             if not hasattr(self.env.command_manager, "set_root_command"):
@@ -265,6 +314,13 @@ class HierarchicalRootCommand(ActionManager):
                     "HierarchicalRootCommand requires a command manager with set_root_command()."
                 )
             self.env.command_manager.set_root_command(self.root_command)
+            if self.ee_command_enabled:
+                if not hasattr(self.env.command_manager, "set_root_and_wrist_6d_command"):
+                    raise RuntimeError(
+                        "HierarchicalRootCommand with ee_command.enabled=True requires a command manager "
+                        "with set_root_and_wrist_6d_command()."
+                    )
+                self.env.command_manager.set_root_and_wrist_6d_command(self.ee_command)
             low_td = tensordict.clone()
             if self.low_policy_obs_key is not None and self.low_policy_obs_key in low_td.keys():
                 if self.low_policy_obs_key in self.env.observation_funcs:
