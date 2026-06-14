@@ -1,0 +1,2336 @@
+{
+  "params": {
+    "target_fps": 50,
+    "pad_before": 25,
+    "pad_after": 50,
+    "segment_len": 1000
+  },
+  "segments": {
+    "BMLmovi/Subject_6_F_MoSh/Subject_6_F_4_stageii.npz": [
+      [
+        0,
+        271
+      ]
+    ],
+    "BMLmovi/Subject_6_F_MoSh/Subject_6_F_7_stageii.npz": [
+      [
+        0,
+        296
+      ]
+    ],
+    "CMU/05/05_01_stageii.npz": [
+      [
+        0,
+        326
+      ]
+    ],
+    "CMU/06/06_01_stageii.npz": [
+      [
+        0,
+        281
+      ]
+    ],
+    "CMU/06/06_03_stageii.npz": [
+      [
+        0,
+        296
+      ]
+    ],
+    "CMU/07/07_04_stageii.npz": [
+      [
+        0,
+        261
+      ]
+    ],
+    "CMU/07/07_05_stageii.npz": [
+      [
+        0,
+        291
+      ]
+    ],
+    "CMU/07/07_06_stageii.npz": [
+      [
+        0,
+        251
+      ]
+    ],
+    "CMU/08/08_04_stageii.npz": [
+      [
+        0,
+        276
+      ]
+    ],
+    "CMU/10/10_04_stageii.npz": [
+      [
+        0,
+        306
+      ]
+    ],
+    "CMU/111/111_01_stageii.npz": [
+      [
+        0,
+        491
+      ]
+    ],
+    "CMU/111/111_29_stageii.npz": [
+      [
+        0,
+        301
+      ]
+    ],
+    "CMU/111/111_33_stageii.npz": [
+      [
+        0,
+        936
+      ]
+    ],
+    "CMU/113/113_24_stageii.npz": [
+      [
+        0,
+        536
+      ]
+    ],
+    "CMU/114/114_12_stageii.npz": [
+      [
+        0,
+        541
+      ]
+    ],
+    "CMU/118/118_06_stageii.npz": [
+      [
+        0,
+        301
+      ]
+    ],
+    "CMU/118/118_07_stageii.npz": [
+      [
+        0,
+        366
+      ]
+    ],
+    "CMU/12/12_01_stageii.npz": [
+      [
+        0,
+        296
+      ]
+    ],
+    "CMU/12/12_02_stageii.npz": [
+      [
+        0,
+        356
+      ]
+    ],
+    "CMU/12/12_03_stageii.npz": [
+      [
+        0,
+        311
+      ]
+    ],
+    "CMU/123/123_01_stageii.npz": [
+      [
+        0,
+        376
+      ]
+    ],
+    "CMU/123/123_02_stageii.npz": [
+      [
+        0,
+        391
+      ]
+    ],
+    "CMU/123/123_03_stageii.npz": [
+      [
+        0,
+        846
+      ]
+    ],
+    "CMU/123/123_05_stageii.npz": [
+      [
+        0,
+        451
+      ]
+    ],
+    "CMU/123/123_06_stageii.npz": [
+      [
+        0,
+        426
+      ]
+    ],
+    "CMU/123/123_07_stageii.npz": [
+      [
+        0,
+        726
+      ]
+    ],
+    "CMU/123/123_08_stageii.npz": [
+      [
+        0,
+        431
+      ]
+    ],
+    "CMU/123/123_11_stageii.npz": [
+      [
+        0,
+        336
+      ]
+    ],
+    "CMU/123/123_12_stageii.npz": [
+      [
+        0,
+        406
+      ]
+    ],
+    "CMU/123/123_13_stageii.npz": [
+      [
+        0,
+        356
+      ]
+    ],
+    "CMU/124/124_12_stageii.npz": [
+      [
+        0,
+        696
+      ]
+    ],
+    "CMU/13/13_07_stageii.npz": [
+      [
+        0,
+        681
+      ]
+    ],
+    "CMU/13/13_08_stageii.npz": [
+      [
+        0,
+        746
+      ]
+    ],
+    "CMU/13/13_09_stageii.npz": [
+      [
+        0,
+        536
+      ]
+    ],
+    "CMU/13/13_14_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/13/13_20_stageii.npz": [
+      [
+        1000,
+        2000
+      ],
+      [
+        2000,
+        2456
+      ]
+    ],
+    "CMU/13/13_21_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        2000
+      ],
+      [
+        2000,
+        2341
+      ]
+    ],
+    "CMU/13/13_22_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        2000
+      ]
+    ],
+    "CMU/13/13_31_stageii.npz": [
+      [
+        1000,
+        1331
+      ]
+    ],
+    "CMU/131/131_02_stageii.npz": [
+      [
+        0,
+        596
+      ]
+    ],
+    "CMU/132/132_01_stageii.npz": [
+      [
+        0,
+        666
+      ]
+    ],
+    "CMU/132/132_02_stageii.npz": [
+      [
+        0,
+        551
+      ]
+    ],
+    "CMU/132/132_03_stageii.npz": [
+      [
+        0,
+        691
+      ]
+    ],
+    "CMU/132/132_04_stageii.npz": [
+      [
+        0,
+        636
+      ]
+    ],
+    "CMU/132/132_05_stageii.npz": [
+      [
+        0,
+        626
+      ]
+    ],
+    "CMU/132/132_06_stageii.npz": [
+      [
+        0,
+        631
+      ]
+    ],
+    "CMU/132/132_07_stageii.npz": [
+      [
+        0,
+        451
+      ]
+    ],
+    "CMU/132/132_08_stageii.npz": [
+      [
+        0,
+        681
+      ]
+    ],
+    "CMU/132/132_09_stageii.npz": [
+      [
+        0,
+        566
+      ]
+    ],
+    "CMU/132/132_10_stageii.npz": [
+      [
+        0,
+        751
+      ]
+    ],
+    "CMU/132/132_11_stageii.npz": [
+      [
+        0,
+        746
+      ]
+    ],
+    "CMU/132/132_12_stageii.npz": [
+      [
+        0,
+        736
+      ]
+    ],
+    "CMU/132/132_24_stageii.npz": [
+      [
+        0,
+        386
+      ]
+    ],
+    "CMU/132/132_29_stageii.npz": [
+      [
+        0,
+        401
+      ]
+    ],
+    "CMU/132/132_30_stageii.npz": [
+      [
+        0,
+        401
+      ]
+    ],
+    "CMU/132/132_31_stageii.npz": [
+      [
+        0,
+        376
+      ]
+    ],
+    "CMU/132/132_32_stageii.npz": [
+      [
+        0,
+        346
+      ]
+    ],
+    "CMU/132/132_34_stageii.npz": [
+      [
+        0,
+        291
+      ]
+    ],
+    "CMU/132/132_35_stageii.npz": [
+      [
+        0,
+        601
+      ]
+    ],
+    "CMU/132/132_40_stageii.npz": [
+      [
+        0,
+        426
+      ]
+    ],
+    "CMU/132/132_42_stageii.npz": [
+      [
+        0,
+        361
+      ]
+    ],
+    "CMU/132/132_43_stageii.npz": [
+      [
+        0,
+        411
+      ]
+    ],
+    "CMU/132/132_45_stageii.npz": [
+      [
+        0,
+        716
+      ]
+    ],
+    "CMU/132/132_46_stageii.npz": [
+      [
+        0,
+        586
+      ]
+    ],
+    "CMU/132/132_47_stageii.npz": [
+      [
+        0,
+        706
+      ]
+    ],
+    "CMU/132/132_48_stageii.npz": [
+      [
+        0,
+        751
+      ]
+    ],
+    "CMU/132/132_50_stageii.npz": [
+      [
+        0,
+        966
+      ]
+    ],
+    "CMU/143/143_40_stageii.npz": [
+      [
+        0,
+        881
+      ]
+    ],
+    "CMU/144/144_08_stageii.npz": [
+      [
+        1000,
+        1326
+      ]
+    ],
+    "CMU/144/144_17_stageii.npz": [
+      [
+        1000,
+        1251
+      ]
+    ],
+    "CMU/15/15_06_stageii.npz": [
+      [
+        1000,
+        1576
+      ]
+    ],
+    "CMU/15/15_07_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        2000
+      ],
+      [
+        2000,
+        2366
+      ]
+    ],
+    "CMU/15/15_08_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1686
+      ]
+    ],
+    "CMU/15/15_11_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        2000
+      ],
+      [
+        2000,
+        3000
+      ],
+      [
+        3000,
+        3991
+      ]
+    ],
+    "CMU/15/15_12_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        2000
+      ],
+      [
+        3000,
+        3861
+      ]
+    ],
+    "CMU/29/29_02_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1376
+      ]
+    ],
+    "CMU/29/29_03_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/29/29_04_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1671
+      ]
+    ],
+    "CMU/29/29_05_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1626
+      ]
+    ],
+    "CMU/29/29_06_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        2000,
+        3000
+      ],
+      [
+        3000,
+        3426
+      ]
+    ],
+    "CMU/29/29_07_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1386
+      ]
+    ],
+    "CMU/29/29_08_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/29/29_09_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1631
+      ]
+    ],
+    "CMU/29/29_10_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        2000
+      ],
+      [
+        2000,
+        3000
+      ],
+      [
+        3000,
+        3386
+      ]
+    ],
+    "CMU/29/29_11_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1626
+      ]
+    ],
+    "CMU/29/29_12_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        2000
+      ],
+      [
+        2000,
+        3000
+      ],
+      [
+        3000,
+        4000
+      ],
+      [
+        4000,
+        5000
+      ],
+      [
+        6000,
+        6336
+      ]
+    ],
+    "CMU/29/29_13_stageii.npz": [
+      [
+        1000,
+        2000
+      ],
+      [
+        2000,
+        3000
+      ],
+      [
+        4000,
+        5000
+      ],
+      [
+        5000,
+        6000
+      ]
+    ],
+    "CMU/29/29_14_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1481
+      ]
+    ],
+    "CMU/29/29_15_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1921
+      ]
+    ],
+    "CMU/29/29_16_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1921
+      ]
+    ],
+    "CMU/29/29_17_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1871
+      ]
+    ],
+    "CMU/29/29_18_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        2000
+      ],
+      [
+        2000,
+        2561
+      ]
+    ],
+    "CMU/29/29_19_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1561
+      ]
+    ],
+    "CMU/29/29_21_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1741
+      ]
+    ],
+    "CMU/29/29_25_stageii.npz": [
+      [
+        1000,
+        1926
+      ]
+    ],
+    "CMU/30/30_01_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1421
+      ]
+    ],
+    "CMU/30/30_02_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/30/30_07_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1391
+      ]
+    ],
+    "CMU/30/30_09_stageii.npz": [
+      [
+        1000,
+        1641
+      ]
+    ],
+    "CMU/30/30_11_stageii.npz": [
+      [
+        1000,
+        2000
+      ],
+      [
+        2000,
+        3000
+      ],
+      [
+        3000,
+        4000
+      ],
+      [
+        6000,
+        6286
+      ]
+    ],
+    "CMU/30/30_12_stageii.npz": [
+      [
+        1000,
+        2000
+      ],
+      [
+        2000,
+        3000
+      ],
+      [
+        3000,
+        4000
+      ],
+      [
+        4000,
+        5000
+      ]
+    ],
+    "CMU/30/30_13_stageii.npz": [
+      [
+        0,
+        896
+      ]
+    ],
+    "CMU/30/30_19_stageii.npz": [
+      [
+        1000,
+        1781
+      ]
+    ],
+    "CMU/30/30_21_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1776
+      ]
+    ],
+    "CMU/31/31_01_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1726
+      ]
+    ],
+    "CMU/31/31_05_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1401
+      ]
+    ],
+    "CMU/31/31_07_stageii.npz": [
+      [
+        1000,
+        1616
+      ]
+    ],
+    "CMU/31/31_09_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        2000
+      ],
+      [
+        2000,
+        3000
+      ],
+      [
+        3000,
+        4000
+      ],
+      [
+        5000,
+        6000
+      ]
+    ],
+    "CMU/31/31_13_stageii.npz": [
+      [
+        1000,
+        1696
+      ]
+    ],
+    "CMU/32/32_03_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1426
+      ]
+    ],
+    "CMU/32/32_07_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1376
+      ]
+    ],
+    "CMU/35/35_03_stageii.npz": [
+      [
+        0,
+        256
+      ]
+    ],
+    "CMU/35/35_04_stageii.npz": [
+      [
+        0,
+        256
+      ]
+    ],
+    "CMU/35/35_05_stageii.npz": [
+      [
+        0,
+        256
+      ]
+    ],
+    "CMU/35/35_06_stageii.npz": [
+      [
+        0,
+        256
+      ]
+    ],
+    "CMU/35/35_08_stageii.npz": [
+      [
+        0,
+        266
+      ]
+    ],
+    "CMU/35/35_10_stageii.npz": [
+      [
+        0,
+        256
+      ]
+    ],
+    "CMU/35/35_13_stageii.npz": [
+      [
+        0,
+        266
+      ]
+    ],
+    "CMU/35/35_16_stageii.npz": [
+      [
+        0,
+        261
+      ]
+    ],
+    "CMU/35/35_28_stageii.npz": [
+      [
+        0,
+        251
+      ]
+    ],
+    "CMU/35/35_29_stageii.npz": [
+      [
+        0,
+        281
+      ]
+    ],
+    "CMU/35/35_31_stageii.npz": [
+      [
+        0,
+        251
+      ]
+    ],
+    "CMU/35/35_33_stageii.npz": [
+      [
+        0,
+        251
+      ]
+    ],
+    "CMU/37/37_01_stageii.npz": [
+      [
+        0,
+        286
+      ]
+    ],
+    "CMU/38/38_02_stageii.npz": [
+      [
+        0,
+        251
+      ]
+    ],
+    "CMU/40/40_12_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        2000
+      ],
+      [
+        2000,
+        3000
+      ],
+      [
+        3000,
+        3591
+      ]
+    ],
+    "CMU/41/41_10_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1706
+      ]
+    ],
+    "CMU/41/41_11_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1386
+      ]
+    ],
+    "CMU/49/49_01_stageii.npz": [
+      [
+        0,
+        346
+      ]
+    ],
+    "CMU/49/49_15_stageii.npz": [
+      [
+        0,
+        471
+      ]
+    ],
+    "CMU/54/54_13_stageii.npz": [
+      [
+        0,
+        756
+      ]
+    ],
+    "CMU/54/54_23_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/55/55_02_stageii.npz": [
+      [
+        0,
+        986
+      ]
+    ],
+    "CMU/55/55_05_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/55/55_06_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        2000
+      ],
+      [
+        3000,
+        3941
+      ]
+    ],
+    "CMU/55/55_10_stageii.npz": [
+      [
+        0,
+        641
+      ]
+    ],
+    "CMU/55/55_11_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/55/55_12_stageii.npz": [
+      [
+        0,
+        941
+      ]
+    ],
+    "CMU/55/55_21_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1536
+      ]
+    ],
+    "CMU/55/55_25_stageii.npz": [
+      [
+        1000,
+        1406
+      ]
+    ],
+    "CMU/62/62_01_stageii.npz": [
+      [
+        0,
+        976
+      ]
+    ],
+    "CMU/62/62_02_stageii.npz": [
+      [
+        0,
+        941
+      ]
+    ],
+    "CMU/70/70_01_stageii.npz": [
+      [
+        0,
+        376
+      ]
+    ],
+    "CMU/70/70_02_stageii.npz": [
+      [
+        0,
+        391
+      ]
+    ],
+    "CMU/70/70_03_stageii.npz": [
+      [
+        0,
+        846
+      ]
+    ],
+    "CMU/70/70_05_stageii.npz": [
+      [
+        0,
+        451
+      ]
+    ],
+    "CMU/70/70_06_stageii.npz": [
+      [
+        0,
+        426
+      ]
+    ],
+    "CMU/70/70_08_stageii.npz": [
+      [
+        0,
+        431
+      ]
+    ],
+    "CMU/73/73_01_stageii.npz": [
+      [
+        0,
+        376
+      ]
+    ],
+    "CMU/73/73_02_stageii.npz": [
+      [
+        0,
+        391
+      ]
+    ],
+    "CMU/73/73_03_stageii.npz": [
+      [
+        0,
+        846
+      ]
+    ],
+    "CMU/73/73_05_stageii.npz": [
+      [
+        0,
+        451
+      ]
+    ],
+    "CMU/73/73_06_stageii.npz": [
+      [
+        0,
+        426
+      ]
+    ],
+    "CMU/73/73_08_stageii.npz": [
+      [
+        0,
+        431
+      ]
+    ],
+    "CMU/74/74_13_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/74/74_20_stageii.npz": [
+      [
+        0,
+        556
+      ]
+    ],
+    "CMU/79/79_03_stageii.npz": [
+      [
+        0,
+        776
+      ]
+    ],
+    "CMU/79/79_05_stageii.npz": [
+      [
+        0,
+        891
+      ]
+    ],
+    "CMU/79/79_06_stageii.npz": [
+      [
+        0,
+        566
+      ]
+    ],
+    "CMU/79/79_07_stageii.npz": [
+      [
+        0,
+        351
+      ]
+    ],
+    "CMU/79/79_08_stageii.npz": [
+      [
+        0,
+        446
+      ]
+    ],
+    "CMU/79/79_09_stageii.npz": [
+      [
+        0,
+        776
+      ]
+    ],
+    "CMU/79/79_10_stageii.npz": [
+      [
+        0,
+        661
+      ]
+    ],
+    "CMU/79/79_12_stageii.npz": [
+      [
+        0,
+        931
+      ]
+    ],
+    "CMU/79/79_13_stageii.npz": [
+      [
+        0,
+        626
+      ]
+    ],
+    "CMU/79/79_14_stageii.npz": [
+      [
+        0,
+        686
+      ]
+    ],
+    "CMU/79/79_15_stageii.npz": [
+      [
+        0,
+        806
+      ]
+    ],
+    "CMU/79/79_16_stageii.npz": [
+      [
+        0,
+        676
+      ]
+    ],
+    "CMU/79/79_17_stageii.npz": [
+      [
+        0,
+        746
+      ]
+    ],
+    "CMU/79/79_19_stageii.npz": [
+      [
+        0,
+        651
+      ]
+    ],
+    "CMU/79/79_20_stageii.npz": [
+      [
+        0,
+        696
+      ]
+    ],
+    "CMU/79/79_21_stageii.npz": [
+      [
+        0,
+        756
+      ]
+    ],
+    "CMU/79/79_23_stageii.npz": [
+      [
+        0,
+        686
+      ]
+    ],
+    "CMU/79/79_24_stageii.npz": [
+      [
+        0,
+        696
+      ]
+    ],
+    "CMU/79/79_25_stageii.npz": [
+      [
+        0,
+        576
+      ]
+    ],
+    "CMU/79/79_27_stageii.npz": [
+      [
+        0,
+        811
+      ]
+    ],
+    "CMU/79/79_28_stageii.npz": [
+      [
+        0,
+        416
+      ]
+    ],
+    "CMU/79/79_29_stageii.npz": [
+      [
+        0,
+        641
+      ]
+    ],
+    "CMU/79/79_30_stageii.npz": [
+      [
+        0,
+        741
+      ]
+    ],
+    "CMU/79/79_31_stageii.npz": [
+      [
+        0,
+        556
+      ]
+    ],
+    "CMU/79/79_32_stageii.npz": [
+      [
+        0,
+        876
+      ]
+    ],
+    "CMU/79/79_33_stageii.npz": [
+      [
+        0,
+        561
+      ]
+    ],
+    "CMU/79/79_34_stageii.npz": [
+      [
+        0,
+        696
+      ]
+    ],
+    "CMU/79/79_35_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/79/79_36_stageii.npz": [
+      [
+        0,
+        506
+      ]
+    ],
+    "CMU/79/79_37_stageii.npz": [
+      [
+        0,
+        576
+      ]
+    ],
+    "CMU/79/79_38_stageii.npz": [
+      [
+        0,
+        526
+      ]
+    ],
+    "CMU/79/79_39_stageii.npz": [
+      [
+        0,
+        746
+      ]
+    ],
+    "CMU/79/79_40_stageii.npz": [
+      [
+        0,
+        796
+      ]
+    ],
+    "CMU/79/79_41_stageii.npz": [
+      [
+        0,
+        996
+      ]
+    ],
+    "CMU/79/79_42_stageii.npz": [
+      [
+        0,
+        736
+      ]
+    ],
+    "CMU/79/79_43_stageii.npz": [
+      [
+        0,
+        896
+      ]
+    ],
+    "CMU/79/79_44_stageii.npz": [
+      [
+        0,
+        786
+      ]
+    ],
+    "CMU/79/79_45_stageii.npz": [
+      [
+        0,
+        796
+      ]
+    ],
+    "CMU/79/79_46_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/79/79_47_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/79/79_51_stageii.npz": [
+      [
+        0,
+        786
+      ]
+    ],
+    "CMU/79/79_53_stageii.npz": [
+      [
+        0,
+        696
+      ]
+    ],
+    "CMU/79/79_55_stageii.npz": [
+      [
+        0,
+        606
+      ]
+    ],
+    "CMU/79/79_58_stageii.npz": [
+      [
+        0,
+        781
+      ]
+    ],
+    "CMU/79/79_59_stageii.npz": [
+      [
+        0,
+        786
+      ]
+    ],
+    "CMU/79/79_62_stageii.npz": [
+      [
+        0,
+        781
+      ]
+    ],
+    "CMU/79/79_64_stageii.npz": [
+      [
+        0,
+        976
+      ]
+    ],
+    "CMU/79/79_69_stageii.npz": [
+      [
+        0,
+        756
+      ]
+    ],
+    "CMU/79/79_71_stageii.npz": [
+      [
+        0,
+        976
+      ]
+    ],
+    "CMU/79/79_73_stageii.npz": [
+      [
+        0,
+        816
+      ]
+    ],
+    "CMU/79/79_74_stageii.npz": [
+      [
+        0,
+        846
+      ]
+    ],
+    "CMU/79/79_75_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/79/79_76_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/79/79_77_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/79/79_78_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/79/79_79_stageii.npz": [
+      [
+        0,
+        776
+      ]
+    ],
+    "CMU/79/79_80_stageii.npz": [
+      [
+        0,
+        896
+      ]
+    ],
+    "CMU/79/79_82_stageii.npz": [
+      [
+        0,
+        716
+      ]
+    ],
+    "CMU/79/79_83_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/79/79_84_stageii.npz": [
+      [
+        0,
+        806
+      ]
+    ],
+    "CMU/79/79_85_stageii.npz": [
+      [
+        0,
+        951
+      ]
+    ],
+    "CMU/79/79_88_stageii.npz": [
+      [
+        0,
+        831
+      ]
+    ],
+    "CMU/79/79_89_stageii.npz": [
+      [
+        0,
+        811
+      ]
+    ],
+    "CMU/79/79_90_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/79/79_91_stageii.npz": [
+      [
+        0,
+        491
+      ]
+    ],
+    "CMU/79/79_93_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/79/79_94_stageii.npz": [
+      [
+        0,
+        856
+      ]
+    ],
+    "CMU/79/79_95_stageii.npz": [
+      [
+        0,
+        861
+      ]
+    ],
+    "CMU/79/79_96_stageii.npz": [
+      [
+        0,
+        541
+      ]
+    ],
+    "CMU/80/80_01_stageii.npz": [
+      [
+        0,
+        781
+      ]
+    ],
+    "CMU/80/80_02_stageii.npz": [
+      [
+        0,
+        661
+      ]
+    ],
+    "CMU/80/80_04_stageii.npz": [
+      [
+        0,
+        996
+      ]
+    ],
+    "CMU/80/80_06_stageii.npz": [
+      [
+        0,
+        876
+      ]
+    ],
+    "CMU/80/80_07_stageii.npz": [
+      [
+        1000,
+        1376
+      ]
+    ],
+    "CMU/80/80_10_stageii.npz": [
+      [
+        0,
+        721
+      ]
+    ],
+    "CMU/80/80_11_stageii.npz": [
+      [
+        0,
+        661
+      ]
+    ],
+    "CMU/80/80_13_stageii.npz": [
+      [
+        0,
+        921
+      ]
+    ],
+    "CMU/80/80_16_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/80/80_17_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1276
+      ]
+    ],
+    "CMU/80/80_18_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1336
+      ]
+    ],
+    "CMU/80/80_24_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1561
+      ]
+    ],
+    "CMU/80/80_25_stageii.npz": [
+      [
+        0,
+        996
+      ]
+    ],
+    "CMU/80/80_26_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/80/80_28_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/80/80_29_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/80/80_30_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/80/80_31_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1376
+      ]
+    ],
+    "CMU/80/80_32_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1421
+      ]
+    ],
+    "CMU/80/80_33_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1691
+      ]
+    ],
+    "CMU/80/80_35_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1696
+      ]
+    ],
+    "CMU/80/80_36_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1481
+      ]
+    ],
+    "CMU/80/80_38_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        2000
+      ]
+    ],
+    "CMU/80/80_40_stageii.npz": [
+      [
+        0,
+        836
+      ]
+    ],
+    "CMU/80/80_42_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/80/80_43_stageii.npz": [
+      [
+        0,
+        891
+      ]
+    ],
+    "CMU/80/80_44_stageii.npz": [
+      [
+        0,
+        851
+      ]
+    ],
+    "CMU/80/80_48_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/80/80_50_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/80/80_61_stageii.npz": [
+      [
+        0,
+        956
+      ]
+    ],
+    "CMU/80/80_70_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1576
+      ]
+    ],
+    "CMU/80/80_72_stageii.npz": [
+      [
+        0,
+        981
+      ]
+    ],
+    "CMU/80/80_73_stageii.npz": [
+      [
+        0,
+        736
+      ]
+    ],
+    "CMU/84/84_13_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "CMU/84/84_20_stageii.npz": [
+      [
+        0,
+        556
+      ]
+    ],
+    "CMU/90/90_23_stageii.npz": [
+      [
+        0,
+        571
+      ]
+    ],
+    "CMU/90/90_26_stageii.npz": [
+      [
+        0,
+        671
+      ]
+    ],
+    "CMU/90/90_27_stageii.npz": [
+      [
+        0,
+        586
+      ]
+    ],
+    "HumanEva/S1/Box_1_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "HumanEva/S1/Box_3_stageii.npz": [
+      [
+        0,
+        766
+      ]
+    ],
+    "HumanEva/S3/Box_1_stageii.npz": [
+      [
+        0,
+        1000
+      ]
+    ],
+    "HumanEva/S3/Gestures_1_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1471
+      ]
+    ],
+    "HumanEva/S3/Gestures_3_stageii.npz": [
+      [
+        0,
+        821
+      ]
+    ],
+    "HumanEva/S3/ThrowCatch_1_stageii.npz": [
+      [
+        0,
+        1000
+      ],
+      [
+        1000,
+        1291
+      ]
+    ],
+    "HumanEva/S3/ThrowCatch_3_stageii.npz": [
+      [
+        0,
+        941
+      ]
+    ],
+    "KIT/1297/wipe01_stageii.npz": [
+      [
+        0,
+        651
+      ]
+    ],
+    "KIT/1297/wipe02_stageii.npz": [
+      [
+        0,
+        841
+      ]
+    ],
+    "KIT/1297/wipe06_stageii.npz": [
+      [
+        0,
+        806
+      ]
+    ],
+    "KIT/1297/wipe09_stageii.npz": [
+      [
+        0,
+        951
+      ]
+    ],
+    "KIT/3/912_3_03_stageii.npz": [
+      [
+        0,
+        711
+      ]
+    ],
+    "KIT/3/912_3_04_stageii.npz": [
+      [
+        0,
+        686
+      ]
+    ],
+    "KIT/3/912_3_05_stageii.npz": [
+      [
+        0,
+        626
+      ]
+    ],
+    "KIT/3/912_3_07_stageii.npz": [
+      [
+        0,
+        911
+      ]
+    ],
+    "KIT/3/912_3_08_stageii.npz": [
+      [
+        0,
+        811
+      ]
+    ],
+    "KIT/3/push_from_the_left_side02_stageii.npz": [
+      [
+        0,
+        416
+      ]
+    ],
+    "KIT/3/push_from_the_left_side03_stageii.npz": [
+      [
+        0,
+        426
+      ]
+    ],
+    "KIT/3/push_from_the_left_side04_stageii.npz": [
+      [
+        0,
+        341
+      ]
+    ],
+    "KIT/3/push_from_the_left_side08_stageii.npz": [
+      [
+        0,
+        411
+      ]
+    ],
+    "KIT/3/push_from_the_left_side09_stageii.npz": [
+      [
+        0,
+        321
+      ]
+    ],
+    "KIT/3/push_from_the_left_side10_stageii.npz": [
+      [
+        0,
+        471
+      ]
+    ],
+    "KIT/3/push_from_the_left_side11_stageii.npz": [
+      [
+        0,
+        441
+      ]
+    ],
+    "KIT/3/push_from_the_left_side12_stageii.npz": [
+      [
+        0,
+        461
+      ]
+    ],
+    "KIT/3/walk_with_left_support02_stageii.npz": [
+      [
+        0,
+        451
+      ]
+    ],
+    "KIT/3/walk_with_left_support06_FrqONi5_stageii.npz": [
+      [
+        0,
+        456
+      ]
+    ],
+    "KIT/3/walk_with_left_support06_stageii.npz": [
+      [
+        0,
+        456
+      ]
+    ],
+    "KIT/3/walk_with_left_support_table01_stageii.npz": [
+      [
+        0,
+        431
+      ]
+    ],
+    "KIT/3/walk_with_left_support_table08_stageii.npz": [
+      [
+        0,
+        476
+      ]
+    ],
+    "KIT/3/wave_both11_stageii.npz": [
+      [
+        0,
+        441
+      ]
+    ],
+    "KIT/314/go_over_beam09_stageii.npz": [
+      [
+        0,
+        406
+      ]
+    ],
+    "KIT/348/go_over_beam06_stageii.npz": [
+      [
+        0,
+        301
+      ]
+    ],
+    "KIT/513/seesaw_down06_stageii.npz": [
+      [
+        0,
+        496
+      ]
+    ],
+    "KIT/513/seesaw_down08_stageii.npz": [
+      [
+        0,
+        481
+      ]
+    ],
+    "KIT/513/seesaw_down09_stageii.npz": [
+      [
+        0,
+        386
+      ]
+    ],
+    "KIT/513/seesaw_down10_stageii.npz": [
+      [
+        0,
+        411
+      ]
+    ],
+    "KIT/513/seesaw_up07_stageii.npz": [
+      [
+        0,
+        656
+      ]
+    ],
+    "KIT/513/seesaw_up09_stageii.npz": [
+      [
+        0,
+        666
+      ]
+    ],
+    "KIT/513/seesaw_up10_stageii.npz": [
+      [
+        0,
+        536
+      ]
+    ],
+    "KIT/675/walk_with_handrail_beam_right01_stageii.npz": [
+      [
+        0,
+        326
+      ]
+    ],
+    "KIT/675/walk_with_handrail_beam_right06_stageii.npz": [
+      [
+        0,
+        316
+      ]
+    ],
+    "KIT/675/walk_with_handrail_beam_right07_stageii.npz": [
+      [
+        0,
+        346
+      ]
+    ],
+    "KIT/675/walk_with_handrail_right01_stageii.npz": [
+      [
+        0,
+        276
+      ]
+    ],
+    "KIT/675/walk_with_handrail_right02_stageii.npz": [
+      [
+        0,
+        311
+      ]
+    ],
+    "KIT/675/walk_with_handrail_right05_stageii.npz": [
+      [
+        0,
+        271
+      ]
+    ],
+    "KIT/675/walk_with_handrail_right06_stageii.npz": [
+      [
+        0,
+        251
+      ]
+    ],
+    "KIT/675/walk_with_handrail_right07_stageii.npz": [
+      [
+        0,
+        266
+      ]
+    ],
+    "KIT/675/walk_with_handrail_right08_stageii.npz": [
+      [
+        0,
+        286
+      ]
+    ],
+    "KIT/675/walk_with_handrail_right10_stageii.npz": [
+      [
+        0,
+        271
+      ]
+    ],
+    "KIT/675/walk_with_handrail_table_right006_stageii.npz": [
+      [
+        0,
+        321
+      ]
+    ],
+    "KIT/675/walk_with_table_left01_stageii.npz": [
+      [
+        0,
+        416
+      ]
+    ],
+    "KIT/675/walk_with_table_left02_stageii.npz": [
+      [
+        0,
+        451
+      ]
+    ],
+    "KIT/675/walk_with_table_left03_stageii.npz": [
+      [
+        0,
+        431
+      ]
+    ],
+    "KIT/675/walk_with_table_left04_stageii.npz": [
+      [
+        0,
+        391
+      ]
+    ],
+    "KIT/675/walk_with_table_left05_stageii.npz": [
+      [
+        0,
+        446
+      ]
+    ],
+    "KIT/675/walk_with_table_left06_stageii.npz": [
+      [
+        0,
+        411
+      ]
+    ],
+    "KIT/675/walk_with_table_left07_stageii.npz": [
+      [
+        0,
+        406
+      ]
+    ],
+    "KIT/675/walk_with_table_left08_stageii.npz": [
+      [
+        0,
+        411
+      ]
+    ],
+    "KIT/675/walk_with_table_left09_stageii.npz": [
+      [
+        0,
+        421
+      ]
+    ],
+    "KIT/675/walk_with_table_left10_stageii.npz": [
+      [
+        0,
+        446
+      ]
+    ],
+    "KIT/9/WalkingStraightBackwards01_stageii.npz": [
+      [
+        0,
+        331
+      ]
+    ],
+    "KIT/9/WalkingStraightBackwards02_stageii.npz": [
+      [
+        0,
+        316
+      ]
+    ],
+    "KIT/9/WalkingStraightBackwards03_stageii.npz": [
+      [
+        0,
+        321
+      ]
+    ],
+    "KIT/9/WalkingStraightBackwards04_stageii.npz": [
+      [
+        0,
+        316
+      ]
+    ],
+    "KIT/9/WalkingStraightBackwards05_stageii.npz": [
+      [
+        0,
+        316
+      ]
+    ],
+    "KIT/9/WalkingStraightBackwards06_stageii.npz": [
+      [
+        0,
+        321
+      ]
+    ],
+    "KIT/9/WalkingStraightBackwards07_stageii.npz": [
+      [
+        0,
+        341
+      ]
+    ],
+    "KIT/9/WalkingStraightBackwards09_stageii.npz": [
+      [
+        0,
+        301
+      ]
+    ],
+    "KIT/9/WalkingStraightBackwards10_stageii.npz": [
+      [
+        0,
+        301
+      ]
+    ],
+    "KIT/912/912_3_03_stageii.npz": [
+      [
+        0,
+        711
+      ]
+    ],
+    "KIT/912/912_3_04_stageii.npz": [
+      [
+        0,
+        686
+      ]
+    ],
+    "KIT/912/912_3_05_stageii.npz": [
+      [
+        0,
+        626
+      ]
+    ],
+    "KIT/912/912_3_07_stageii.npz": [
+      [
+        0,
+        911
+      ]
+    ],
+    "KIT/912/912_3_08_stageii.npz": [
+      [
+        0,
+        811
+      ]
+    ]
+  }
+}
