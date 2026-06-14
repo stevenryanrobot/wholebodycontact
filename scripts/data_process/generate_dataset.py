@@ -85,13 +85,25 @@ def make_allowlist_filter(allow: set[tuple[str, int, int]], dataset_root: Path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dataset-root", required=True, help="NPZ file or directory to convert")
-    ap.add_argument("--allowlist", required=True, help="Allowlist json from precompute step")
+    ap.add_argument("--allowlist", default=None, help="Optional allowlist json from precompute step")
     ap.add_argument("--mem-path", required=True, help="Output memmap directory")
+    ap.add_argument("--target-fps", type=int, default=50)
+    ap.add_argument("--pad-before", type=int, default=25)
+    ap.add_argument("--pad-after", type=int, default=50)
+    ap.add_argument("--segment-len", type=int, default=1000)
     args = ap.parse_args()
 
     dataset_root = Path(args.dataset_root)
-    allow, params = load_allowlist(args.allowlist)
-    allow_filter = make_allowlist_filter(allow, dataset_root)
+    params = {
+        "target_fps": args.target_fps,
+        "pad_before": args.pad_before,
+        "pad_after": args.pad_after,
+        "segment_len": args.segment_len,
+    }
+    allow_filter = None
+    if args.allowlist is not None:
+        allow, params = load_allowlist(args.allowlist)
+        allow_filter = make_allowlist_filter(allow, dataset_root)
 
     MotionDataset.create_from_path(
         str(dataset_root),
