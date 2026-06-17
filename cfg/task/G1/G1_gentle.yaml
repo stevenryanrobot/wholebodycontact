@@ -36,6 +36,9 @@ command:
   max_force: 120.0
   net_force_limit: 120.0
   net_torque_limit: 20.0
+  force_safe_bounds: [30.0, 30.0]
+  force_safe_default: 30.0
+  force_penalty_offset: 15.0
   ignore_joint_patterns: []
   joint_patterns: ["waist_*", ".*_hip_.*", ".*_knee.*", ".*wrist.*"]
   dataset:

@@ -1339,6 +1339,9 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         net_pull_rest_range: Sequence[int] = (50, 150),
         net_pull_xy_only: bool = True,
         external_force_enabled: bool = True,
+        force_safe_bounds: Sequence[float] = (5.0, 15.0),
+        force_penalty_offset: float = 10.0,
+        force_safe_default: float = 10.0,
         **kwargs,
     ):
         super().__init__(env, *args, **kwargs)
@@ -1384,6 +1387,11 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         self.root_compliance_gain = 0.01
         self.root_compliance_max_offset = 0.3
         self.root_compliance_ema = 0.95
+        if len(force_safe_bounds) != 2:
+            raise ValueError(f"force_safe_bounds must have 2 values, got {force_safe_bounds}")
+        self.force_safe_bounds = tuple(float(x) for x in force_safe_bounds)
+        self.force_penalty_offset = float(force_penalty_offset)
+        self.force_safe_default = float(force_safe_default)
 
         self.skip_ref = False
 
@@ -1394,9 +1402,6 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
             self.force_partial_single_prob = 0.5
 
             # force threshold sample
-            self.force_safe_bounds = (5.0, 15.0)
-            self.force_penalty_offset = 10.0
-            self.force_safe_default = 10.0
             self.force_safe_limit_tl = TemporalLerp(
                 shape=(self.num_envs, 1),
                 device=self.device,
