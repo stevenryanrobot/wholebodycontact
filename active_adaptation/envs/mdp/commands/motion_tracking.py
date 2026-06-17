@@ -237,6 +237,16 @@ class MotionTrackingCommand(Command):
         self.teleop_obs_source = teleop.get("obs_source", "motion")
         if self.teleop_obs_source not in ("motion", "udp"):
             raise ValueError(f"Unsupported teleop obs_source: {self.teleop_obs_source}")
+        self.use_root_and_wrist_6d_command = False
+        self.root_and_wrist_6d_command = torch.zeros(self.num_envs, 12, device=self.device)
+        self.use_feet_pos_b_command = False
+        self.feet_pos_b_command = torch.zeros(self.num_envs, 6, device=self.device)
+        self.use_command_override = False
+        self.command_override = torch.zeros(self.num_envs, 6, device=self.device)
+        self.use_static_root_command = False
+        self.static_root_height = torch.zeros(self.num_envs, 1, device=self.device)
+        self.static_heading_w = torch.zeros(self.num_envs, 3, device=self.device)
+        self.static_heading_w[:, 0] = 1.0
         self.future_steps = torch.tensor([0, 2, 4, 8, 16], device=self.device)
 
         self.zero_init_prob = 1.0
@@ -709,6 +719,8 @@ class MotionTrackingCommand(Command):
 
     @observation
     def root_and_wrist_6d(self):
+        if self.use_root_and_wrist_6d_command:
+            return self.root_and_wrist_6d_command
         if not hasattr(self, "_printed_root_and_wrist_6d_source"):
             print(
                 f"[MotionTrackingCommand] root_and_wrist_6d source={self.teleop_obs_source}",
@@ -718,6 +730,17 @@ class MotionTrackingCommand(Command):
         if self.teleop_obs_source == "udp":
             return self._root_and_wrist_6d_from_udp()
         return self._root_and_wrist_6d_from_motion()
+
+    def get_root_and_wrist_6d_reference(self):
+        if self.teleop_obs_source == "udp":
+            return self._root_and_wrist_6d_from_udp()
+        return self._root_and_wrist_6d_from_motion()
+
+    def set_root_and_wrist_6d_command(self, command: torch.Tensor):
+        if command.shape[-1] != 12:
+            raise ValueError(f"Root-and-wrist command must have 12 dims, got {command.shape[-1]}.")
+        self.use_root_and_wrist_6d_command = True
+        self.root_and_wrist_6d_command[:] = command
 
     def root_and_wrist_6d_sym(self):
         """
@@ -740,6 +763,11 @@ class MotionTrackingCommand(Command):
 
     @observation
     def feet_pos_b(self):
+        if self.use_feet_pos_b_command:
+            return self.feet_pos_b_command
+        return self.get_feet_pos_b_reference()
+
+    def get_feet_pos_b_reference(self):
         motion = self._motion
         if hasattr(motion, "local_body_pos"):
             target_feet_b = motion.local_body_pos[:, 0, self.feet_idx_motion, :]
@@ -748,6 +776,12 @@ class MotionTrackingCommand(Command):
         else:
             return torch.zeros(self.num_envs, 6, device=self.device)
         return target_feet_b.reshape(self.num_envs, -1)
+
+    def set_feet_pos_b_command(self, command: torch.Tensor):
+        if command.shape[-1] != 6:
+            raise ValueError(f"Feet position command must have 6 dims, got {command.shape[-1]}.")
+        self.use_feet_pos_b_command = True
+        self.feet_pos_b_command[:] = command
 
     def feet_pos_b_sym(self):
         return sym_utils.cartesian_space_symmetry(
@@ -1304,6 +1338,7 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         net_pull_ramp_down_range: Sequence[int] = (25, 75),
         net_pull_rest_range: Sequence[int] = (50, 150),
         net_pull_xy_only: bool = True,
+        external_force_enabled: bool = True,
         **kwargs,
     ):
         super().__init__(env, *args, **kwargs)
@@ -1322,6 +1357,7 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         self.net_force_limit  = torch.as_tensor(net_force_limit,  dtype=torch.float32, device=self.device)
         self.net_torque_limit = torch.as_tensor(net_torque_limit, dtype=torch.float32, device=self.device)
         self.compliance = compliance
+        self.external_force_enabled = external_force_enabled
         self.external_force_mode = external_force_mode
         if self.external_force_mode not in ("legacy", "net_pull"):
             raise ValueError(f"Unsupported external_force_mode: {self.external_force_mode}")
@@ -1448,6 +1484,24 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
 
         self.configure_admittance()
         self.configure_net_pull()
+
+    def set_external_force_enabled(self, enabled: bool):
+        self.external_force_enabled = bool(enabled)
+        if not self.external_force_enabled:
+            self.force_apply_world = False
+            self.asset.has_external_wrench = False
+            if hasattr(self, "force_apply_buffer"):
+                self.force_apply_buffer.zero_()
+            if hasattr(self, "torque_apply_buffer"):
+                self.torque_apply_buffer.zero_()
+            if hasattr(self, "force_applied_w"):
+                self.force_applied_w.zero_()
+            if hasattr(self, "force_applied_b"):
+                self.force_applied_b.zero_()
+            if hasattr(self, "net_pull_force_w"):
+                self.net_pull_force_w.zero_()
+            if hasattr(self, "net_pull_force_b"):
+                self.net_pull_force_b.zero_()
 
     def configure_net_pull(self):
         self.net_pull_idx_motion, self.net_pull_idx_asset = _match_indices(
@@ -2006,6 +2060,9 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
     def before_update(self):
         super().before_update()
         self.update_reward_target()
+        if not self.external_force_enabled:
+            self.set_external_force_enabled(False)
+            return
         if self.external_force_mode == "net_pull":
             self.force_safe_limit_tl.update_time()
             self.net_pull_force_tl.update_time()
@@ -2023,6 +2080,9 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
 
     def step(self, substep: int):
         super().step(substep)
+        if not self.external_force_enabled:
+            self.set_external_force_enabled(False)
+            return
         if self.external_force_mode == "net_pull":
             self.force_apply_net_pull(substep)
         elif self.compliance:
@@ -2194,6 +2254,10 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
 
     @observation
     def command(self):
+        if self.use_static_root_command:
+            return self._static_root_command()
+        if self.use_command_override:
+            return self.command_override
         if not hasattr(self, "_printed_command_source"):
             print(
                 f"[MotionTrackingCommand] command source={self.teleop_obs_source}",
@@ -2203,6 +2267,44 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         if self.teleop_obs_source == "udp":
             return self._command_from_udp()
         return self._command_from_motion()
+
+    def set_command_override(self, command: torch.Tensor):
+        if command.shape[-1] != 6:
+            raise ValueError(f"Command override must have 6 dims, got {command.shape[-1]}.")
+        self.use_command_override = True
+        self.command_override[:] = command
+
+    def set_static_root_command(
+        self,
+        root_height: torch.Tensor | None = None,
+        heading_w: torch.Tensor | None = None,
+    ):
+        self.use_static_root_command = True
+        if root_height is None:
+            root_height = self.asset.data.root_pos_w[:, 2:3]
+        if heading_w is None:
+            heading = torch.tensor([1.0, 0.0, 0.0], device=self.device)
+            heading_w = quat_apply(
+                yaw_quat(self.asset.data.root_quat_w),
+                heading.unsqueeze(0).expand(self.num_envs, -1),
+            )
+        self.static_root_height[:] = torch.as_tensor(root_height, device=self.device, dtype=torch.float32)
+        self.static_heading_w[:] = normalize(torch.as_tensor(heading_w, device=self.device, dtype=torch.float32))
+        self.static_heading_w[:, 2] = 0.0
+        self.static_heading_w[:] = normalize(self.static_heading_w)
+
+    def _static_root_command(self):
+        current_yaw_quat = yaw_quat(self.asset.data.root_quat_w)
+        target_heading_b = quat_apply_inverse(current_yaw_quat, self.static_heading_w)
+        target_heading_b_xy = normalize(target_heading_b[:, :2])
+        target_linvel_b_xy = torch.zeros(self.num_envs, 2, device=self.device)
+        force_limit = self.force_safe_limit_tl.current if hasattr(self, "force_safe_limit_tl") else torch.zeros(self.num_envs, 1, device=self.device)
+        return torch.cat([
+            self.static_root_height,
+            target_linvel_b_xy,
+            target_heading_b_xy,
+            force_limit,
+        ], dim=-1)
 
     @observation
     def force_priv(self):

@@ -14,6 +14,8 @@ import struct
 import time
 
 from active_adaptation.envs.mdp.commands.base import Command
+from active_adaptation.envs.mdp import observation
+import active_adaptation.utils.symmetry as sym_utils
 
 
 # UDP protocol for VR teleoperation
@@ -126,19 +128,26 @@ class TeleopCommand(Command):
     Converts to observations and rewards compatible with the trained policy.
     """
 
-    def __init__(self, env, bind_port: int = 15000):
+    def __init__(self, env, bind_port: int = 15000, mode: str = "udp"):
         """
         Initialize teleoperation command system.
         
         Args:
             env: Base environment
             bind_port: UDP port for receiving VR input
+            mode: "udp" receives commands from the UDP receiver. "programmatic"
+                keeps targets set through set_targets/set_root_and_wrist_6d_command.
         """
         super().__init__(env)
         
         self.bind_port = bind_port
-        self._teleop = UdpTeleopReceiver(bind_port=bind_port)
-        self._teleop.start()
+        self.mode = mode
+        self._teleop = None
+        if self.mode not in ("udp", "programmatic"):
+            raise ValueError(f"Unsupported TeleopCommand mode: {self.mode}")
+        if self.mode == "udp":
+            self._teleop = UdpTeleopReceiver(bind_port=bind_port)
+            self._teleop.start()
         
         # Store latest target poses [N, 3] and [N, 4]
         self._target_root_pos = torch.zeros(self.num_envs, 3, device=self.device)
@@ -157,11 +166,20 @@ class TeleopCommand(Command):
         self._target_r_quat = torch.zeros(self.num_envs, 4, device=self.device)
         self._target_r_quat[:, -1] = 1.0
 
+        self.root_command = torch.zeros(self.num_envs, 5, device=self.device)
+        self.root_command[:, 0] = self.asset.data.default_root_state[:, 2]
+        self.root_command[:, 3] = 1.0
+        self.root_and_wrist_6d_command = torch.zeros(self.num_envs, 12, device=self.device)
+        self.use_root_and_wrist_6d_command = False
+
     def update(self):
         """
         Update target poses from UDP input.
         Called once per environment step.
         """
+        if self.mode == "programmatic":
+            return
+
         # Get latest UDP data
         seq, t_recv, root_pos, root_quat, head_pos, head_quat, l_pos, l_quat, r_pos, r_quat = self._teleop.get_latest()
         
@@ -190,8 +208,87 @@ class TeleopCommand(Command):
         self._target_root_pos[env_ids] = 0.0
         self._target_root_quat[env_ids, :3] = 0.0
         self._target_root_quat[env_ids, 3] = 1.0
+        self.root_command[env_ids] = 0.0
+        self.root_command[env_ids, 0] = self.asset.data.default_root_state[env_ids, 2]
+        self.root_command[env_ids, 3] = 1.0
+
+    def _expand_target(self, value: torch.Tensor, dim: int) -> torch.Tensor:
+        value = torch.as_tensor(value, dtype=torch.float32, device=self.device)
+        if value.ndim == 1:
+            value = value.unsqueeze(0).expand(self.num_envs, -1)
+        if value.shape != (self.num_envs, dim):
+            raise ValueError(f"Expected target shape {(self.num_envs, dim)} or ({dim},), got {tuple(value.shape)}.")
+        return value
+
+    def set_targets(
+        self,
+        root_pos: Optional[torch.Tensor] = None,
+        root_quat: Optional[torch.Tensor] = None,
+        head_pos: Optional[torch.Tensor] = None,
+        head_quat: Optional[torch.Tensor] = None,
+        l_pos: Optional[torch.Tensor] = None,
+        l_quat: Optional[torch.Tensor] = None,
+        r_pos: Optional[torch.Tensor] = None,
+        r_quat: Optional[torch.Tensor] = None,
+    ):
+        """Set teleoperation pose targets directly from a script."""
+        if root_pos is not None:
+            self._target_root_pos[:] = self._expand_target(root_pos, 3)
+        if root_quat is not None:
+            self._target_root_quat[:] = self._expand_target(root_quat, 4)
+        if head_pos is not None:
+            self._target_head_pos[:] = self._expand_target(head_pos, 3)
+        if head_quat is not None:
+            self._target_head_quat[:] = self._expand_target(head_quat, 4)
+        if l_pos is not None:
+            self._target_l_pos[:] = self._expand_target(l_pos, 3)
+        if l_quat is not None:
+            self._target_l_quat[:] = self._expand_target(l_quat, 4)
+        if r_pos is not None:
+            self._target_r_pos[:] = self._expand_target(r_pos, 3)
+        if r_quat is not None:
+            self._target_r_quat[:] = self._expand_target(r_quat, 4)
+
+    def set_root_command(self, command: torch.Tensor):
+        if command.shape[-1] != 5:
+            raise ValueError(f"Root command must have 5 dims, got {command.shape[-1]}.")
+        self.root_command[:] = command
+
+    def get_root_and_wrist_6d_reference(self):
+        return self.root_and_wrist_6d_command
+
+    def set_root_and_wrist_6d_command(self, command: torch.Tensor):
+        if command.shape[-1] != 12:
+            raise ValueError(f"Root-and-wrist command must have 12 dims, got {command.shape[-1]}.")
+        self.use_root_and_wrist_6d_command = True
+        self.root_and_wrist_6d_command[:] = command
+
+    @observation
+    def root_and_wrist_6d(self):
+        return self.root_and_wrist_6d_command
+
+    def root_and_wrist_6d_sym(self):
+        pos_perm = torch.tensor([3, 4, 5, 0, 1, 2])
+        pos_signs = torch.tensor([1., -1., 1., 1., -1., 1.])
+        ori_perm = torch.tensor([9, 10, 11, 6, 7, 8])
+        ori_signs = torch.tensor([-1., 1., -1., -1., 1., -1.])
+        return sym_utils.SymmetryTransform(
+            perm=torch.cat([pos_perm, ori_perm]),
+            signs=torch.cat([pos_signs, ori_signs]),
+        )
+
+    @observation
+    def command(self):
+        force_limit = torch.full((self.num_envs, 1), 0.3, device=self.device)
+        return torch.cat([self.root_command, force_limit], dim=-1)
+
+    def command_sym(self):
+        return sym_utils.SymmetryTransform(
+            perm=torch.arange(6),
+            signs=[1., 1., -1., 1., -1., 1.],
+        )
 
     def __del__(self):
         """Cleanup UDP receiver thread."""
-        if hasattr(self, '_teleop'):
+        if hasattr(self, '_teleop') and self._teleop is not None:
             self._teleop.stop()
