@@ -166,6 +166,7 @@ class HierarchicalRootCommand(ActionManager):
         command_dim: int = 5,
         nominal_root_height: float = 0.79,
         command_scale: Tuple[float, float, float, float, float] = (0.25, 0.8, 0.8, 1.0, 1.0),
+        root_command: Dict | None = None,
         ee_command: Dict | None = None,
         feet_command: Dict | None = None,
         low_policy_command_slice: Tuple[int, int] | None = (1, 7),
@@ -174,7 +175,10 @@ class HierarchicalRootCommand(ActionManager):
         **kwargs,
     ):
         super().__init__(env)
-        self.root_command_dim = 5
+        self.root_command_cfg = dict(root_command or {})
+        self.root_command_enabled = self.root_command_cfg.get("enabled", True)
+        self.root_command_dim = 5 if self.root_command_enabled else 0
+        self.root_storage_dim = 5
         self.ee_command_cfg = dict(ee_command or {})
         self.ee_command_enabled = self.ee_command_cfg.get("enabled", False)
         self.ee_command_dim = 12 if self.ee_command_enabled else 0
@@ -182,14 +186,18 @@ class HierarchicalRootCommand(ActionManager):
         self.feet_command_enabled = self.feet_command_cfg.get("enabled", False)
         self.feet_command_dim = 6 if self.feet_command_enabled else 0
         expected_command_dim = self.root_command_dim + self.ee_command_dim + self.feet_command_dim
-        if command_dim not in (self.root_command_dim, expected_command_dim):
+        legacy_root_only_dim = 5
+        valid_dims = {expected_command_dim}
+        if self.root_command_enabled and not self.ee_command_enabled and not self.feet_command_enabled:
+            valid_dims.add(legacy_root_only_dim)
+        if command_dim not in valid_dims:
             raise ValueError(
-                "HierarchicalRootCommand expects command_dim=5 for root-only or "
-                f"{expected_command_dim} when configured components are enabled, got {command_dim}."
+                "HierarchicalRootCommand got command_dim="
+                f"{command_dim}, expected one of {sorted(valid_dims)} for the configured components."
             )
         self.action_dim = expected_command_dim
         self.nominal_root_height = nominal_root_height
-        self.command_scale = torch.tensor(command_scale, device=self.device).reshape(1, self.root_command_dim)
+        self.command_scale = torch.tensor(command_scale, device=self.device).reshape(1, self.root_storage_dim)
         self.ee_pos_scale = torch.tensor(
             self.ee_command_cfg.get("pos_scale", [0.15, 0.15, 0.15]),
             device=self.device,
@@ -215,7 +223,7 @@ class HierarchicalRootCommand(ActionManager):
         )
 
         self.high_action_buf = torch.zeros(self.num_envs, 3, self.action_dim, device=self.device)
-        self.root_command = torch.zeros(self.num_envs, self.root_command_dim, device=self.device)
+        self.root_command = torch.zeros(self.num_envs, self.root_storage_dim, device=self.device)
         self.ee_command = torch.zeros(self.num_envs, self.ee_command_dim, device=self.device)
         self.feet_command = torch.zeros(self.num_envs, self.feet_command_dim, device=self.device)
         self.low_action = torch.zeros(self.num_envs, self.low_action_manager.action_dim, device=self.device)
@@ -302,6 +310,11 @@ class HierarchicalRootCommand(ActionManager):
         self.low_action_manager.debug_draw()
 
     def _decode_root_command(self, raw_action: torch.Tensor) -> torch.Tensor:
+        if not self.root_command_enabled:
+            command = torch.zeros(self.num_envs, self.root_storage_dim, device=self.device)
+            command[:, 0] = self.nominal_root_height
+            command[:, 3] = 1.0
+            return command
         action = torch.tanh(raw_action) * self.command_scale
         command = torch.zeros_like(action)
         command[:, 0] = self.nominal_root_height + action[:, 0]
@@ -337,8 +350,12 @@ class HierarchicalRootCommand(ActionManager):
             self.high_action_buf = torch.roll(self.high_action_buf, shifts=1, dims=1)
             self.high_action_buf[:, 0, :] = raw_action
 
-            self.root_command[:] = self._decode_root_command(raw_action[:, :self.root_command_dim])
-            cursor = self.root_command_dim
+            cursor = 0
+            if self.root_command_enabled:
+                self.root_command[:] = self._decode_root_command(raw_action[:, cursor:cursor + self.root_command_dim])
+                cursor += self.root_command_dim
+            else:
+                self._set_default_root_command()
             if self.ee_command_enabled:
                 self.ee_command[:] = self._decode_ee_command(raw_action[:, cursor:cursor + self.ee_command_dim])
                 cursor += self.ee_command_dim

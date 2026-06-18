@@ -347,6 +347,82 @@ class root_force_spring_tracking(Reward):
         return torch.exp(-error / self.sigma)
 
 
+class ee_force_compliance_tracking(Reward):
+    def __init__(
+        self,
+        env,
+        weight: float,
+        stiffness: float = 60.0,
+        sigma: float = 0.08,
+        max_offset: float = 0.25,
+        force_deadband: float = 2.0,
+        enabled: bool = True,
+    ):
+        super().__init__(env, weight, enabled)
+        self.asset: Articulation = self.env.scene["robot"]
+        self.stiffness = stiffness
+        self.sigma = sigma
+        self.max_offset = max_offset
+        self.force_deadband = force_deadband
+        self.ee_names = ["left_hand_mimic", "right_hand_mimic"]
+
+    def _ee_indices(self):
+        command = self.env.command_manager
+        try:
+            motion_idx = torch.tensor(
+                [command.dataset.body_names.index(name) for name in self.ee_names],
+                device=self.device,
+                dtype=torch.long,
+            )
+            asset_idx = torch.tensor(
+                [self.asset.body_names.index(name) for name in self.ee_names],
+                device=self.device,
+                dtype=torch.long,
+            )
+        except ValueError:
+            return None, None
+        return motion_idx, asset_idx
+
+    def compute(self) -> torch.Tensor:
+        command = self.env.command_manager
+        motion_idx, asset_idx = self._ee_indices()
+        if motion_idx is None:
+            return torch.zeros(self.num_envs, 1, device=self.device)
+
+        motion = command._motion
+        if hasattr(motion, "local_body_pos"):
+            target_ee_b = motion.local_body_pos[:, 0, motion_idx, :]
+        elif hasattr(motion, "body_pos_b"):
+            target_ee_b = motion.body_pos_b[:, 0, motion_idx, :]
+        else:
+            return torch.zeros(self.num_envs, 1, device=self.device)
+
+        force_w = torch.zeros(self.num_envs, 2, 3, device=self.device)
+        force_apply_idx = getattr(command, "force_apply_idx_asset", torch.empty(0, device=self.device, dtype=torch.long))
+        force_applied_w = getattr(command, "force_applied_w", None)
+        if force_applied_w is not None:
+            force_apply_list = force_apply_idx.tolist()
+            for ee_i, body_i in enumerate(asset_idx.tolist()):
+                if body_i in force_apply_list:
+                    force_i = force_apply_list.index(body_i)
+                    force_w[:, ee_i] = force_applied_w[:, force_i]
+
+        root_quat = self.asset.data.root_quat_w.unsqueeze(1)
+        force_b = quat_apply_inverse(root_quat.expand(-1, 2, -1), force_w)
+        force_norm = force_b.norm(dim=-1, keepdim=True)
+        active_force = torch.where(force_norm > self.force_deadband, force_b, torch.zeros_like(force_b))
+        target_offset_b = clamp_norm(active_force / self.stiffness, max=self.max_offset)
+        compliance_target_b = target_ee_b + target_offset_b
+
+        actual_ee_w = self.asset.data.body_pos_w[:, asset_idx, :]
+        actual_ee_b = quat_apply_inverse(
+            root_quat.expand(-1, 2, -1),
+            actual_ee_w - self.asset.data.root_pos_w.unsqueeze(1),
+        )
+        error = (actual_ee_b - compliance_target_b).norm(dim=-1).mean(dim=-1, keepdim=True)
+        return torch.exp(-error / self.sigma)
+
+
 class root_force_velocity_tracking(Reward):
     def __init__(
         self,

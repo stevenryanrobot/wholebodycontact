@@ -742,6 +742,13 @@ class MotionTrackingCommand(Command):
         self.use_root_and_wrist_6d_command = True
         self.root_and_wrist_6d_command[:] = command
 
+    @observation
+    def root_and_wrist_6d_reference(self):
+        return self.get_root_and_wrist_6d_reference()
+
+    def root_and_wrist_6d_reference_sym(self):
+        return self.root_and_wrist_6d_sym()
+
     def root_and_wrist_6d_sym(self):
         """
         Symmetry for root_and_wrist_6d (wrist only, root commented out):
@@ -1339,6 +1346,8 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         net_pull_rest_range: Sequence[int] = (50, 150),
         net_pull_xy_only: bool = True,
         external_force_enabled: bool = True,
+        force_apply_pattern: Sequence[str] | None = None,
+        force_active_pattern: Sequence[str] | None = None,
         force_safe_bounds: Sequence[float] = (5.0, 15.0),
         force_penalty_offset: float = 10.0,
         force_safe_default: float = 10.0,
@@ -1346,7 +1355,7 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
     ):
         super().__init__(env, *args, **kwargs)
 
-        force_apply_pattern = [".*shoulder_yaw_link", ".*wrist_roll_link", ".*hand_mimic"]
+        force_apply_pattern = list(force_apply_pattern or [".*shoulder_yaw_link", ".*wrist_roll_link", ".*hand_mimic"])
         self.force_apply_idx_motion, self.force_apply_idx_asset = _match_indices(
             self.dataset.body_names,
             self.asset.body_names,
@@ -1397,8 +1406,41 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
 
         with torch.device(self.device):
             self.force_type_probs = torch.tensor([0.4, 0.15, 0.15, 0.15, 0.15]) # [zero_force, full_force, left_full, right_full, partial_force]
-            self.left_mask = torch.tensor([1, 0, 1, 0, 1, 0], dtype=torch.bool)[None, :, None]
-            self.right_mask = torch.tensor([0, 1, 0, 1, 0, 1], dtype=torch.bool)[None, :, None]
+            force_body_names = get_items_by_index(self.asset.body_names, self.force_apply_idx_asset)
+            self.left_mask = torch.tensor(
+                ["left" in name for name in force_body_names],
+                dtype=torch.bool,
+                device=self.device,
+            )[None, :, None]
+            self.right_mask = torch.tensor(
+                ["right" in name for name in force_body_names],
+                dtype=torch.bool,
+                device=self.device,
+            )[None, :, None]
+            if not self.left_mask.any() or not self.right_mask.any():
+                raise ValueError(f"force_apply_pattern must match left/right bodies, got {force_body_names}.")
+            if force_active_pattern is None:
+                self.force_active_mask = torch.ones(1, self.num_force_bodies, 1, dtype=torch.bool, device=self.device)
+            else:
+                active_names = set(
+                    get_items_by_index(
+                        self.asset.body_names,
+                        _match_indices(
+                            self.dataset.body_names,
+                            self.asset.body_names,
+                            list(force_active_pattern),
+                            name_map=self.keypoint_map,
+                            device=self.device,
+                        )[1],
+                    )
+                )
+                self.force_active_mask = torch.tensor(
+                    [name in active_names for name in force_body_names],
+                    dtype=torch.bool,
+                    device=self.device,
+                )[None, :, None]
+                if not self.force_active_mask.any():
+                    raise ValueError(f"force_active_pattern matched no force bodies: {force_active_pattern}.")
             self.force_partial_single_prob = 0.5
 
             # force threshold sample
@@ -1774,6 +1816,7 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
             force_enable[left_full, :] = self.left_mask
             force_enable[right_full, :] = self.right_mask
             force_enable[partial_force, :] = torch.rand_like(force_enable[partial_force, :], dtype=torch.float32) <= self.force_partial_single_prob
+            force_enable &= self.force_active_mask
             self.force_enable[need_resample_envs] = force_enable
 
             kp_left = random_uniform((need_resample_envs.shape[0], 1, 1), self.kp_range[0], self.kp_range[1], self.device)
@@ -1801,9 +1844,9 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         need_left_sample = ((torch.rand(env_ids.shape[0], device=self.device) < self.force_origin_sample_prob) & (self.force_type[env_ids] != 4)).nonzero(as_tuple=False).squeeze(-1)
         need_right_sample = ((torch.rand(env_ids.shape[0], device=self.device) < self.force_origin_sample_prob) & (self.force_type[env_ids] != 4)).nonzero(as_tuple=False).squeeze(-1)
 
-        def sample_origin(source: torch.Tensor, env_ids: torch.Tensor):
+        def sample_origin(source: torch.Tensor, env_ids: torch.Tensor, num_points: int):
             idx = (torch.rand(env_ids.shape[0], device=self.device) * self.force_origin_samples).floor().int()
-            link_pos_in_torso = source[idx]
+            link_pos_in_torso = source[idx][:, :num_points]
             torso_pos = self.asset.data.body_pos_w[env_ids, self.torso_idx_asset].unsqueeze(1)
             torso_quat = self.asset.data.body_quat_w[env_ids, self.torso_idx_asset].unsqueeze(1)
 
@@ -1813,8 +1856,16 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
             link_pos_w = quat_apply(torso_quat, link_pos_in_torso) + torso_pos
             return quat_apply_inverse(root_quat, link_pos_w - root_pos)
 
-        pos_b_end_left[need_left_sample] = sample_origin(self.force_origin_samples_left, env_ids[need_left_sample])
-        pos_b_end_right[need_right_sample] = sample_origin(self.force_origin_samples_right, env_ids[need_right_sample])
+        pos_b_end_left[need_left_sample] = sample_origin(
+            self.force_origin_samples_left,
+            env_ids[need_left_sample],
+            pos_b_end_left.shape[1],
+        )
+        pos_b_end_right[need_right_sample] = sample_origin(
+            self.force_origin_samples_right,
+            env_ids[need_right_sample],
+            pos_b_end_right.shape[1],
+        )
 
         pos_b_end = torch.zeros_like(pos_b_start)
         pos_b_end[:, self.left_mask.reshape(-1), :] = pos_b_end_left
