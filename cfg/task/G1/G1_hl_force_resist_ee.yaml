@@ -1,12 +1,8 @@
 name: G1HLFORCERESISTEE
 
 defaults:
-  - /task/G1/G1_hl_force_resist@_here_
+  - /task/G1/hl/base@_here_
+  - /task/G1/hl/action/root_ee_3kp@_here_
+  - /task/G1/hl/force/net_pull@_here_
+  - /task/G1/hl/task/force_resist@_here_
   - _self_
-
-action:
-  command_dim: 17
-  ee_command:
-    enabled: true
-    pos_scale: [0.15, 0.15, 0.15]
-    rot_scale: [0.5, 0.5, 0.5]

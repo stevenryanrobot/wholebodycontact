@@ -1,36 +1,8 @@
 name: G1HLFORCEWALK
 
 defaults:
-  - /task/G1/G1_hl_root_hold@_here_
+  - /task/G1/hl/base@_here_
+  - /task/G1/hl/action/root_3kp@_here_
+  - /task/G1/hl/force/net_pull@_here_
+  - /task/G1/hl/task/force_walk@_here_
   - _self_
-
-command:
-  external_force_mode: net_pull
-  net_pull_apply_pattern: [".*torso.*", ".*shoulder_yaw_link", ".*wrist_roll_link", ".*hand_mimic"]
-  net_pull_force_range: [20.0, 60.0]
-  net_pull_ramp_up_range: [25, 75]
-  net_pull_hold_range: [100, 250]
-  net_pull_ramp_down_range: [25, 75]
-  net_pull_rest_range: [50, 150]
-  net_pull_xy_only: true
-
-observation:
-  hl_policy:
-    boot_indicator_state: {}
-    command: {}
-    force_priv: {enabled: false}
-    net_pull_force_priv: {}
-    root_and_wrist_6d: {}
-    feet_pos_b: {}
-    root_ang_vel_history:      {history_steps: [0], noise_std: 0.05}
-    projected_gravity_history: {history_steps: [0], noise_std: 0.01}
-    joint_pos_history:         {history_steps: [0, 1, 2, 3, 4], noise_std: 0.005}
-    prev_actions:              {steps: 3}
-
-reward:
-  root_hold:
-    root_position_hold: {weight: 0.0, sigma: 0.25, mode: xy, enabled: false}
-    root_force_spring_tracking: {weight: 0.0, stiffness: 400.0, sigma: 0.25, max_offset: 0.5, force_deadband: 5.0, enabled: false}
-    root_force_velocity_tracking: {weight: 5.0, damping: 300.0, max_speed: 0.6, sigma: 0.25, force_deadband: 20.0}
-    root_force_direction_progress: {weight: 1.0, target_speed: 0.5, force_deadband: 20.0}
-    root_height_hold: {weight: 2.0, sigma: 0.08, target_height: 0.79}

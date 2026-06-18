@@ -1,0 +1,10 @@
+defaults:
+  - /task/G1/hl/action/root_3kp@_here_
+  - _self_
+
+action:
+  command_dim: 11
+  low_policy_obs_key: low_policy_feet
+  feet_command:
+    enabled: true
+    pos_scale: [0.15, 0.15, 0.08]

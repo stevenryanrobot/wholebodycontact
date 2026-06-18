@@ -1,25 +1,9 @@
 name: G1HLFORCERESISTFEET
 
 defaults:
-  - /task/G1/G1_hl_force_resist@_here_
+  - /task/G1/hl/base@_here_
+  - /task/G1/hl/action/root_feet_5kp@_here_
+  - /task/G1/hl/low_policy/feet_5kp@_here_
+  - /task/G1/hl/force/net_pull@_here_
+  - /task/G1/hl/task/force_resist@_here_
   - _self_
-
-action:
-  command_dim: 11
-  low_policy_obs_key: low_policy_feet
-  feet_command:
-    enabled: true
-    pos_scale: [0.15, 0.15, 0.08]
-
-observation:
-  # Frozen low-level policy observation for 5-keypoint checkpoints.
-  # Keep this matched to the checkpoint used by task.action.low_policy.run_path.
-  low_policy_feet:
-    boot_indicator_state: {}
-    command: {}
-    root_and_wrist_6d: {}
-    feet_pos_b: {}
-    root_ang_vel_history:      {history_steps: [0], noise_std: 0.05}
-    projected_gravity_history: {history_steps: [0], noise_std: 0.01}
-    joint_pos_history:         {history_steps: [0, 1, 2, 3, 4], noise_std: 0.005}
-    prev_actions:              {steps: 3}

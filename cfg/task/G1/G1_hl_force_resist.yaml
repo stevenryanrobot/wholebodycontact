@@ -1,15 +1,8 @@
 name: G1HLFORCERESIST
 
 defaults:
-  - /task/G1/G1_hl_force_walk@_here_
+  - /task/G1/hl/base@_here_
+  - /task/G1/hl/action/root_3kp@_here_
+  - /task/G1/hl/force/net_pull@_here_
+  - /task/G1/hl/task/force_resist@_here_
   - _self_
-
-reward:
-  root_hold:
-    root_position_hold: {weight: 5.0, sigma: 0.25, mode: xy, enabled: true}
-    root_force_spring_tracking: {weight: 0.0, stiffness: 400.0, sigma: 0.25, max_offset: 0.5, force_deadband: 5.0, enabled: false}
-    root_force_velocity_tracking: {weight: 0.0, damping: 300.0, max_speed: 0.6, sigma: 0.25, force_deadband: 20.0, enabled: false}
-    root_force_direction_progress: {weight: 0.0, target_speed: 0.5, force_deadband: 20.0, enabled: false}
-    root_height_hold: {weight: 3.0, sigma: 0.08, target_height: 0.79}
-    root_velocity_hold: {weight: 2.0, sigma: 0.25}
-    root_command_follow_force_l2: {weight: 2.0, force_deadband: 20.0}

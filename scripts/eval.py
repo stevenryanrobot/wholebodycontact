@@ -15,6 +15,58 @@ from scripts.utils.eval import eval
 
 FILE_PATH = os.path.dirname(__file__)
 
+LEGACY_FORCE_APPLY_PATTERN = [".*shoulder_yaw_link", ".*wrist_roll_link", ".*hand_mimic"]
+
+
+def patch_legacy_force_apply_pattern(cfg):
+    command_cfg = cfg["task"]["command"]
+    command_target = command_cfg.get("_target_", "")
+    if not (
+        command_target.startswith("active_adaptation.envs.mdp.commands.motion_tracking.")
+        and "impedance" in command_target
+    ):
+        return
+    if "force_apply_pattern" not in command_cfg:
+        return
+
+    checkpoint_path = cfg.get("checkpoint_path", None)
+    if checkpoint_path is None:
+        return
+    checkpoint_path = os.path.expanduser(checkpoint_path)
+    if checkpoint_path.startswith("run:"):
+        return
+    if not os.path.exists(checkpoint_path):
+        return
+
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    vecnorm = state_dict.get("vecnorm", {})
+    extra_state = vecnorm.get("_extra_state", {})
+    priv_sum = extra_state.get("priv_sum", None)
+    if priv_sum is None:
+        return
+
+    if priv_sum.shape[0] == 732:
+        active_pattern = list(command_cfg["force_apply_pattern"])
+        if active_pattern != LEGACY_FORCE_APPLY_PATTERN:
+            command_cfg["force_active_pattern"] = active_pattern
+            command_cfg["force_apply_pattern"] = LEGACY_FORCE_APPLY_PATTERN
+            print(
+                "[Compat] Checkpoint vecnorm expects legacy 6-body force_priv. "
+                f"Using force_apply_pattern={LEGACY_FORCE_APPLY_PATTERN} and "
+                f"force_active_pattern={active_pattern}."
+            )
+
+
+def patch_missing_reward_sigma(cfg):
+    command_cfg = cfg["task"]["command"]
+    reward_sigma = command_cfg.get("reward_sigma", None)
+    if reward_sigma is None:
+        return
+    if "feet" not in reward_sigma:
+        reward_sigma["feet"] = [0.2]
+        print("[Compat] Added missing reward_sigma.feet=[0.2] for feet_tracking reward.")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-r", "--run_path", type=str)
@@ -101,6 +153,9 @@ def main():
 
     if args.baseline_root_command:
         cfg["task"]["action"]["override_root_command"] = True
+
+    patch_legacy_force_apply_pattern(cfg)
+    patch_missing_reward_sigma(cfg)
     
     if args.play:
         if not args.success:

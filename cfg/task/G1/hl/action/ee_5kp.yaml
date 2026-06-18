@@ -1,0 +1,6 @@
+defaults:
+  - /task/G1/hl/action/ee_3kp@_here_
+  - _self_
+
+action:
+  low_policy_obs_key: low_policy_feet

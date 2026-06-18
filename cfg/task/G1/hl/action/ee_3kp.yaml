@@ -1,0 +1,12 @@
+defaults:
+  - /task/G1/hl/action/root_3kp@_here_
+  - _self_
+
+action:
+  command_dim: 12
+  root_command:
+    enabled: false
+  ee_command:
+    enabled: true
+    pos_scale: [0.15, 0.15, 0.15]
+    rot_scale: [0.5, 0.5, 0.5]

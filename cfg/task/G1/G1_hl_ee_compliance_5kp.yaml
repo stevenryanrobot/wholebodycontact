@@ -1,0 +1,8 @@
+name: G1HLEECOMPLIANCE5KP
+
+defaults:
+  - /task/G1/hl/base@_here_
+  - /task/G1/hl/action/ee_5kp@_here_
+  - /task/G1/hl/low_policy/feet_5kp@_here_
+  - /task/G1/hl/task/ee_compliance@_here_
+  - _self_
