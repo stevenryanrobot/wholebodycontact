@@ -4,12 +4,12 @@ set -euo pipefail
 LOW_PROJECT_PATH="luoxinyuan-duke-university/gentle_humanoid"
 HL_WANDB_PROJECT="gentle_humanoid_high_level"
 CUDA_VISIBLE_DEVICES="0,1,2,3"
-MASTER_PORT="29503"
+MASTER_PORT="29504"
 NPROC="4"
 
-TASK="G1/G1_hl_ee_compliance"
-LOW_RUN_PATH="${LOW_PROJECT_PATH}/gentle_finetune_3point_amass_limmt_full_stiff30"
-RUN_ID="hl_ee_compliance_3point_amass_limmt_full_stiff30"
+TASK="G1/G1_hl_force_resist_ee"
+LOW_RUN_PATH="${LOW_PROJECT_PATH}/gentle_finetune_root_wrist_12"
+RUN_ID="hl_force_resist_ee_root_wrist_12"
 
 export CUDA_VISIBLE_DEVICES
 
