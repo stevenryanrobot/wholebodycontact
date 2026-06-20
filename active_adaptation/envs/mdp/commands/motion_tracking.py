@@ -37,12 +37,16 @@ from typing import Optional, Tuple
 import os
 
 MAGIC = b"G6D1"
-PACK_FMT = "<4sI" + "f" * 28  # magic + seq + 28 floats
-PACK_SIZE = struct.calcsize(PACK_FMT)
+PACK_HEADER_FMT = "<4sI"
+PACK_HEADER_SIZE = struct.calcsize(PACK_HEADER_FMT)
+PACK_MIN_FLOATS = 28
+PACK_MIN_SIZE = PACK_HEADER_SIZE + PACK_MIN_FLOATS * 4
 
 class UdpTeleopReceiver:
     """
-    Receive UDP packets: root/head/left/right, each (pos3 + quat4) in WORLD frame.
+    Receive UDP packets: root/head/left/right, each (pos3 + quat4), plus optional
+    appended keypoint data. The first optional extension is feet_pos_b with
+    left/right foot xyz appended after the original 28 floats.
     Thread updates latest sample (CPU tensors).
     """
     def __init__(self, bind_ip="0.0.0.0", bind_port=15000, timeout=0.2):
@@ -66,6 +70,8 @@ class UdpTeleopReceiver:
         self._l_quat = torch.tensor([0.0, 0.0, 0.0, 1.0], dtype=torch.float32)
         self._r_pos = torch.zeros(3, dtype=torch.float32)
         self._r_quat = torch.tensor([0.0, 0.0, 0.0, 1.0], dtype=torch.float32)
+        self._has_feet_pos_b = False
+        self._feet_pos_b = torch.zeros(6, dtype=torch.float32)
 
     def start(self):
         if self._running:
@@ -85,18 +91,27 @@ class UdpTeleopReceiver:
         while self._running:
             try:
                 data, _ = sock.recvfrom(2048)
-                if len(data) != PACK_SIZE:
+                if len(data) < PACK_MIN_SIZE:
                     continue
-                magic, seq, *floats = struct.unpack(PACK_FMT, data)
-                if magic != MAGIC:
+                float_bytes = len(data) - PACK_HEADER_SIZE
+                if float_bytes % 4 != 0:
+                    continue
+                num_floats = float_bytes // 4
+                if num_floats < PACK_MIN_FLOATS:
                     continue
 
-                # 4 bodies * 7 floats
-                vals = torch.tensor(floats, dtype=torch.float32)  # shape (28,)
+                magic, seq = struct.unpack(PACK_HEADER_FMT, data[:PACK_HEADER_SIZE])
+                if magic != MAGIC:
+                    continue
+                floats = struct.unpack("<" + "f" * num_floats, data[PACK_HEADER_SIZE:])
+
+                vals = torch.tensor(floats, dtype=torch.float32)
                 root = vals[0:7]
                 head = vals[7:14]
                 left = vals[14:21]
                 right = vals[21:28]
+                has_feet_pos_b = num_floats >= 34
+                feet_pos_b = vals[28:34] if has_feet_pos_b else self._feet_pos_b
 
                 with self._lock:
                     self._seq = int(seq)
@@ -110,6 +125,9 @@ class UdpTeleopReceiver:
                     self._l_quat = left[3:7].clone()
                     self._r_pos = right[0:3].clone()
                     self._r_quat = right[3:7].clone()
+                    self._has_feet_pos_b = bool(has_feet_pos_b)
+                    if has_feet_pos_b:
+                        self._feet_pos_b = feet_pos_b.clone()
 
             except socket.timeout:
                 continue
@@ -129,6 +147,10 @@ class UdpTeleopReceiver:
                 self._l_pos.clone(), self._l_quat.clone(),
                 self._r_pos.clone(), self._r_quat.clone(),
             )
+
+    def get_latest_feet_pos_b(self) -> Tuple[bool, torch.Tensor]:
+        with self._lock:
+            return self._has_feet_pos_b, self._feet_pos_b.clone()
 
 
 def _match_indices(motion_names, asset_names, patterns, name_map=None, device=None, debug=False):
@@ -775,6 +797,11 @@ class MotionTrackingCommand(Command):
         return self.get_feet_pos_b_reference()
 
     def get_feet_pos_b_reference(self):
+        if self.teleop_obs_source == "udp":
+            return self._feet_pos_b_from_udp()
+        return self._feet_pos_b_from_motion()
+
+    def _feet_pos_b_from_motion(self):
         motion = self._motion
         if hasattr(motion, "local_body_pos"):
             target_feet_b = motion.local_body_pos[:, 0, self.feet_idx_motion, :]
@@ -783,6 +810,13 @@ class MotionTrackingCommand(Command):
         else:
             return torch.zeros(self.num_envs, 6, device=self.device)
         return target_feet_b.reshape(self.num_envs, -1)
+
+    def _feet_pos_b_from_udp(self):
+        if self._teleop is not None:
+            has_feet_pos_b, feet_pos_b = self._teleop.get_latest_feet_pos_b()
+            if has_feet_pos_b:
+                return feet_pos_b.to(self.device).unsqueeze(0).expand(self.num_envs, -1)
+        return self._feet_pos_b_from_motion()
 
     def set_feet_pos_b_command(self, command: torch.Tensor):
         if command.shape[-1] != 6:
@@ -2537,6 +2571,11 @@ class RootCommandMotionTrackingCommand_impedance(MotionTrackingCommand_impedance
         self.root_and_wrist_6d_command[:] = command
 
     def get_feet_pos_b_reference(self):
+        if self.teleop_obs_source == "udp":
+            return self._feet_pos_b_from_udp()
+        return self._feet_pos_b_from_motion()
+
+    def _feet_pos_b_from_motion(self):
         motion = self._motion
         if hasattr(motion, "local_body_pos"):
             target_feet_b = motion.local_body_pos[:, 0, self.feet_idx_motion, :]
@@ -2545,6 +2584,13 @@ class RootCommandMotionTrackingCommand_impedance(MotionTrackingCommand_impedance
         else:
             return torch.zeros(self.num_envs, 6, device=self.device)
         return target_feet_b.reshape(self.num_envs, -1)
+
+    def _feet_pos_b_from_udp(self):
+        if self._teleop is not None:
+            has_feet_pos_b, feet_pos_b = self._teleop.get_latest_feet_pos_b()
+            if has_feet_pos_b:
+                return feet_pos_b.to(self.device).unsqueeze(0).expand(self.num_envs, -1)
+        return self._feet_pos_b_from_motion()
 
     def set_feet_pos_b_command(self, command: torch.Tensor):
         if command.shape[-1] != 6:
