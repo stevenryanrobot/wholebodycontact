@@ -7,9 +7,9 @@ CUDA_VISIBLE_DEVICES="0,1,2,3"
 MASTER_PORT="29502"
 NPROC="4"
 
-TASK="G1/G1_hl_root_hold"
-LOW_RUN_PATH="${LOW_PROJECT_PATH}/gentle_finetune_root_wrist_12"
-RUN_ID="hl_root_hold_root_wrist_12"
+TASK="G1/G1_hl_force_resist_feet"
+LOW_RUN_PATH="${LOW_PROJECT_PATH}/gentle_5kp_finetune_limmt_full_stiff30"
+RUN_ID="hl_force_resist_root_feet_5kp_limmt_full_stiff30"
 
 export CUDA_VISIBLE_DEVICES
 

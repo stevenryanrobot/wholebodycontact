@@ -104,13 +104,14 @@ class RewardGroup:
     def compute(self) -> torch.Tensor:
         rewards = []
         for key, func in self.funcs.items():
+            if not func.enabled:
+                continue
             reward, count = func()
             self.env.stats[self.name, key].add_(reward)
             sum, cnt = self.env._stats_ema[self.name][key]
             sum.mul_(self.env._stats_ema_decay).add_(reward.sum())
             cnt.mul_(self.env._stats_ema_decay).add_(count)
-            if func.enabled:
-                rewards.append(reward)
+            rewards.append(reward)
         if len(rewards):
             self.rew_buf[:] = torch.cat(rewards, 1)
         return self.rew_buf.sum(1, True) * self.current_factor

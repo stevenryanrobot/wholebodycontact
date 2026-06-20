@@ -72,21 +72,21 @@ observation:
 
 reward:
   impedance:
-    force_reward: {weight: 0.0}
-    force_exd_penalty: {weight: 0.0}
-    force_target_tracking: {weight: 0.0}
-    force_target_vel_tracking: {weight: 0.0}
-    keypoint_tracking_imp: {weight: 0.0}
-    lower_keypoint_tracking: {weight: 0.0}
+    force_reward: {weight: 0.0, enabled: false}
+    force_exd_penalty: {weight: 0.0, enabled: false}
+    force_target_tracking: {weight: 0.0, enabled: false}
+    force_target_vel_tracking: {weight: 0.0, enabled: false}
+    keypoint_tracking_imp: {weight: 0.0, enabled: false}
+    lower_keypoint_tracking: {weight: 0.0, enabled: false}
   tracking:
-    root_pos_tracking: {weight: 0.0}
-    root_rot_tracking: {weight: 0.0}
-    root_vel_tracking: {weight: 0.0}
-    root_ang_vel_tracking: {weight: 0.0}
-    joint_pos_tracking: {weight: 0.0}
-    joint_vel_tracking: {weight: 0.0}
-    ee_tracking: {weight: 0.0}
-    feet_tracking: {weight: 0.0}
+    root_pos_tracking: {weight: 0.0, enabled: false}
+    root_rot_tracking: {weight: 0.0, enabled: false}
+    root_vel_tracking: {weight: 0.0, enabled: false}
+    root_ang_vel_tracking: {weight: 0.0, enabled: false}
+    joint_pos_tracking: {weight: 0.0, enabled: false}
+    joint_vel_tracking: {weight: 0.0, enabled: false}
+    ee_tracking: {weight: 0.0, enabled: false}
+    feet_tracking: {weight: 0.0, enabled: false}
   loco:
     survival:           {weight: 5.0, enabled: true}
     impact_force_l2:    {weight: 4.0, enabled: true, body_names: .*ankle_roll_link}
