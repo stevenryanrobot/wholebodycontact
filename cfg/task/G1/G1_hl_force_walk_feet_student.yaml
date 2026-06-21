@@ -1,0 +1,9 @@
+name: G1HLFORCEWALKFEETSTUDENT
+
+defaults:
+  - /task/G1/hl/base_student@_here_
+  - /task/G1/hl/action/root_feet_5kp@_here_
+  - /task/G1/hl/low_policy/feet_5kp@_here_
+  - /task/G1/hl/force/net_pull@_here_
+  - /task/G1/hl/task/force_walk@_here_
+  - _self_
