@@ -2134,7 +2134,15 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         # Keep legacy-shaped force tensors meaningful for debug paths that sum them.
         self.force_applied_w.zero_()
         self.force_applied_b.zero_()
-        legacy_slots = torch.clamp(self.net_pull_body_local_idx, max=self.num_force_bodies - 1)
+        force_apply_idx_asset = self.force_apply_idx_asset.to(body_idx.device)
+        legacy_matches = body_idx.unsqueeze(1) == force_apply_idx_asset.unsqueeze(0)
+        if not legacy_matches.any(dim=1).all():
+            missing_body_idx = body_idx[~legacy_matches.any(dim=1)].unique().tolist()
+            missing_body_names = get_items_by_index(self.asset.body_names, missing_body_idx)
+            raise RuntimeError(
+                f"net_pull bodies must also be present in force_apply_pattern, missing: {missing_body_names}"
+            )
+        legacy_slots = legacy_matches.int().argmax(dim=1)
         self.force_keypoint_b.zero_()
         self.force_expected_w.zero_()
         self.force_expected_b.zero_()

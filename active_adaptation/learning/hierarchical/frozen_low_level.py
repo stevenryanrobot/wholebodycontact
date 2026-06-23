@@ -119,17 +119,32 @@ class FrozenLowLevelPolicy:
     def _make_low_action_spec(self):
         return SimpleNamespace(shape=torch.Size([self.action_dim]))
 
+    def _rollout_obs_keys(self) -> list[str]:
+        phase = getattr(self, "_active_phase", self.phase)
+        if phase == "train":
+            return ["policy", "priv", "joint_target"]
+        return ["policy"]
+
     def _build_obs_norm(self, state_dict, observation_spec):
         if self.vecnorm_mode is None or "vecnorm" not in state_dict:
             return None
 
+        checkpoint_extra_state = state_dict["vecnorm"].get("_extra_state", {})
         obs_keys = [
-            key for key, spec in observation_spec.items(True, True)
-            if not (spec.dtype == bool or key.endswith("_"))
+            key for key in self._rollout_obs_keys()
+            if key in observation_spec.keys(True, True) and f"{key}_sum" in checkpoint_extra_state
         ]
+        if not obs_keys:
+            return None
+
         vecnorm = VecNorm(obs_keys, decay=0.9999)
         vecnorm(observation_spec.zero())
-        vecnorm.load_state_dict(state_dict["vecnorm"])
+        filtered_extra_state = {
+            stat_key: value
+            for stat_key, value in checkpoint_extra_state.items()
+            if any(stat_key.startswith(f"{obs_key}_") for obs_key in obs_keys)
+        }
+        vecnorm.load_state_dict({"_extra_state": filtered_extra_state})
         return vecnorm.to_observation_norm().to(self.device)
 
     def _adapt_low_tensordict(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -163,6 +178,7 @@ class FrozenLowLevelPolicy:
             algo_cfg.phase = self.phase
         if self.in_keys is not None:
             algo_cfg.in_keys = self.in_keys
+        self._active_phase = algo_cfg.phase
 
         observation_spec = self._make_low_observation_spec(state_dict)
         policy_cls = hydra.utils.get_class(algo_cfg._target_)

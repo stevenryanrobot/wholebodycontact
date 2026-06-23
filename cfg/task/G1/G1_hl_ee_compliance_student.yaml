@@ -1,8 +1,12 @@
-name: G1HLEECOMPLIANCE
+name: G1HLEECOMPLIANCESTUDENT
 
 defaults:
-  - /task/G1/hl/base@_here_
+  - /task/G1/hl/base_student@_here_
   - /task/G1/hl/action/ee_3kp@_here_
   - /task/G1/hl/force/net_pull_ee@_here_
   - /task/G1/hl/task/ee_compliance@_here_
   - _self_
+
+observation:
+  hl_priv:
+    net_pull_force_priv: {}

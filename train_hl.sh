@@ -8,9 +8,10 @@ MASTER_PORT="29503"
 NPROC="4"
 
 ALGO="root_student_ppo"
-TASK="G1/G1_hl_force_walk_feet_student"
-LOW_RUN_PATH="${LOW_PROJECT_PATH}/gentle_5kp_finetune_limmt_full_stiff30"
-RUN_ID="hl_force_walk_root_feet_5kp_student_limmt_full_stiff30"
+TASK="G1/G1_hl_ee_compliance_student"
+LOW_RUN_PATH="${LOW_PROJECT_PATH}/gentle_finetune_3point_amass_limmt_full_stiff30"
+RUN_NAME="hl_ee_compliance_3kp_student_amass_limmt_full_stiff30"
+RUN_ID="${RUN_NAME}_$(date +%Y%m%d_%H%M%S)"
 
 export CUDA_VISIBLE_DEVICES
 
