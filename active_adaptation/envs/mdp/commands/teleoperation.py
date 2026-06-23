@@ -171,6 +171,8 @@ class TeleopCommand(Command):
         self.root_command[:, 3] = 1.0
         self.root_and_wrist_6d_command = torch.zeros(self.num_envs, 12, device=self.device)
         self.use_root_and_wrist_6d_command = False
+        self.root_and_wrist_6d_reference_override = torch.zeros(self.num_envs, 12, device=self.device)
+        self.use_root_and_wrist_6d_reference_override = False
 
     def update(self):
         """
@@ -255,7 +257,18 @@ class TeleopCommand(Command):
         self.root_command[:] = command
 
     def get_root_and_wrist_6d_reference(self):
+        if self.use_root_and_wrist_6d_reference_override:
+            return self.root_and_wrist_6d_reference_override
         return self.root_and_wrist_6d_command
+
+    def set_root_and_wrist_6d_reference_override(self, command: torch.Tensor):
+        if command.shape[-1] != 12:
+            raise ValueError(f"Root-and-wrist reference override must have 12 dims, got {command.shape[-1]}.")
+        self.use_root_and_wrist_6d_reference_override = True
+        self.root_and_wrist_6d_reference_override[:] = command
+
+    def clear_root_and_wrist_6d_reference_override(self):
+        self.use_root_and_wrist_6d_reference_override = False
 
     def set_root_and_wrist_6d_command(self, command: torch.Tensor):
         if command.shape[-1] != 12:
@@ -281,6 +294,9 @@ class TeleopCommand(Command):
     def command(self):
         force_limit = torch.full((self.num_envs, 1), 0.3, device=self.device)
         return torch.cat([self.root_command, force_limit], dim=-1)
+
+    def get_root_command_reference(self):
+        return self.command()[..., :5]
 
     def command_sym(self):
         return sym_utils.SymmetryTransform(

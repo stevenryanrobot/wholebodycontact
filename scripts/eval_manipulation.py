@@ -118,6 +118,24 @@ def _set_ee_command(command_manager, command: torch.Tensor):
     )
 
 
+def _is_hierarchical_action_manager(action_manager) -> bool:
+    return hasattr(action_manager, "low_policy") and hasattr(action_manager, "_decode_ee_command")
+
+
+def _set_ee_reference(command_manager, command: torch.Tensor):
+    if hasattr(command_manager, "set_root_and_wrist_6d_reference_override"):
+        command_manager.set_root_and_wrist_6d_reference_override(command)
+        return
+    _set_ee_command(command_manager, command)
+
+
+def _set_ee_eval_target(command_manager, action_manager, command: torch.Tensor):
+    if _is_hierarchical_action_manager(action_manager):
+        _set_ee_reference(command_manager, command)
+    else:
+        _set_ee_command(command_manager, command)
+
+
 def _set_external_force(command_manager, enabled: bool):
     if hasattr(command_manager, "set_external_force_enabled"):
         command_manager.set_external_force_enabled(enabled)
@@ -142,6 +160,21 @@ def _configure_external_force(cfg, enabled: bool):
             f"  External force: off requested, but command target does not support it: {command_target}"
         )
     return False
+
+
+def _enable_root_passthrough_for_ee_only_hl(cfg):
+    action_cfg = cfg["task"]["action"]
+    action_target = action_cfg.get("_target_", "")
+    if action_target != "active_adaptation.envs.mdp.action.HierarchicalRootCommand":
+        return
+    root_command_cfg = action_cfg.get("root_command", {})
+    root_enabled = root_command_cfg.get("enabled", True)
+    if root_enabled:
+        return
+    if "root_command" not in action_cfg or action_cfg["root_command"] is None:
+        action_cfg["root_command"] = {}
+    action_cfg["root_command"]["passthrough_reference"] = True
+    print("  Root command: passthrough reference enabled for EE-only high-level teleop")
 
 
 def _set_static_root_command(command_manager, asset):
@@ -211,6 +244,7 @@ def evaluate_ee_tracking(cfg, args):
         base_env = env.base_env if hasattr(env, "base_env") else env
         asset = base_env.scene["robot"]
         command_manager = base_env.command_manager
+        action_manager = base_env.action_manager
         _set_external_force(command_manager, args.external_force == "on")
 
         body_names = [name.strip() for name in EE_TRACKING_BODY_NAMES.split(",")]
@@ -240,7 +274,11 @@ def evaluate_ee_tracking(cfg, args):
             [sample_center_b.reshape(base_env.num_envs, 6), target_axis_angle_b.reshape(base_env.num_envs, 6)],
             dim=-1,
         )
-        _set_ee_command(command_manager, default_command)
+        _set_ee_eval_target(command_manager, action_manager, default_command)
+        if _is_hierarchical_action_manager(action_manager):
+            print("EE tracking eval target is written as high-level EE reference override.", flush=True)
+        else:
+            print("EE tracking eval target is written as low-level EE command override.", flush=True)
         print(
             "EE sample center_b env0 "
             f"default={default_pos_b[0].detach().cpu().tolist()} "
@@ -271,7 +309,7 @@ def evaluate_ee_tracking(cfg, args):
                     ],
                     dim=-1,
                 )
-                _set_ee_command(command_manager, command)
+                _set_ee_eval_target(command_manager, action_manager, command)
 
                 for _ in range(EE_TRACKING_HOLD_STEPS):
                     td_ = rollout_policy(td_)
@@ -534,6 +572,7 @@ def main():
             "enabled": args.obs_source == "udp",
             "obs_source": args.obs_source,
         }
+        _enable_root_passthrough_for_ee_only_hl(cfg)
         cfg["export_policy"] = args.export
         cfg["perf_test"] = False
         

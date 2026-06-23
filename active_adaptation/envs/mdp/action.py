@@ -177,6 +177,7 @@ class HierarchicalRootCommand(ActionManager):
         super().__init__(env)
         self.root_command_cfg = dict(root_command or {})
         self.root_command_enabled = self.root_command_cfg.get("enabled", True)
+        self.root_command_passthrough_reference = self.root_command_cfg.get("passthrough_reference", False)
         self.root_command_dim = 5 if self.root_command_enabled else 0
         self.root_storage_dim = 5
         self.ee_command_cfg = dict(ee_command or {})
@@ -263,6 +264,12 @@ class HierarchicalRootCommand(ActionManager):
         self.root_command[:] = 0.0
         self.root_command[:, 0] = self.nominal_root_height
         self.root_command[:, 3] = 1.0
+
+    def _set_root_command_reference(self):
+        if hasattr(self.env.command_manager, "get_root_command_reference"):
+            self.root_command[:] = self.env.command_manager.get_root_command_reference()
+            return
+        self._set_default_root_command()
 
     def _get_ee_command_reference(self) -> torch.Tensor:
         if not self.ee_command_enabled:
@@ -354,6 +361,8 @@ class HierarchicalRootCommand(ActionManager):
             if self.root_command_enabled:
                 self.root_command[:] = self._decode_root_command(raw_action[:, cursor:cursor + self.root_command_dim])
                 cursor += self.root_command_dim
+            elif self.root_command_passthrough_reference:
+                self._set_root_command_reference()
             else:
                 self._set_default_root_command()
             if self.ee_command_enabled:

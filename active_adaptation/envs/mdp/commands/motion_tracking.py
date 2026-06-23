@@ -261,6 +261,8 @@ class MotionTrackingCommand(Command):
             raise ValueError(f"Unsupported teleop obs_source: {self.teleop_obs_source}")
         self.use_root_and_wrist_6d_command = False
         self.root_and_wrist_6d_command = torch.zeros(self.num_envs, 12, device=self.device)
+        self.use_root_and_wrist_6d_reference_override = False
+        self.root_and_wrist_6d_reference_override = torch.zeros(self.num_envs, 12, device=self.device)
         self.use_feet_pos_b_command = False
         self.feet_pos_b_command = torch.zeros(self.num_envs, 6, device=self.device)
         self.use_command_override = False
@@ -754,9 +756,20 @@ class MotionTrackingCommand(Command):
         return self._root_and_wrist_6d_from_motion()
 
     def get_root_and_wrist_6d_reference(self):
+        if self.use_root_and_wrist_6d_reference_override:
+            return self.root_and_wrist_6d_reference_override
         if self.teleop_obs_source == "udp":
             return self._root_and_wrist_6d_from_udp()
         return self._root_and_wrist_6d_from_motion()
+
+    def set_root_and_wrist_6d_reference_override(self, command: torch.Tensor):
+        if command.shape[-1] != 12:
+            raise ValueError(f"Root-and-wrist reference override must have 12 dims, got {command.shape[-1]}.")
+        self.use_root_and_wrist_6d_reference_override = True
+        self.root_and_wrist_6d_reference_override[:] = command
+
+    def clear_root_and_wrist_6d_reference_override(self):
+        self.use_root_and_wrist_6d_reference_override = False
 
     def set_root_and_wrist_6d_command(self, command: torch.Tensor):
         if command.shape[-1] != 12:
@@ -2366,6 +2379,9 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
             return self._command_from_udp()
         return self._command_from_motion()
 
+    def get_root_command_reference(self):
+        return self.command()[..., :5]
+
     def set_command_override(self, command: torch.Tensor):
         if command.shape[-1] != 6:
             raise ValueError(f"Command override must have 6 dims, got {command.shape[-1]}.")
@@ -2567,7 +2583,18 @@ class RootCommandMotionTrackingCommand_impedance(MotionTrackingCommand_impedance
             raise ValueError(f"Root command must have 5 dims, got {command.shape[-1]}.")
         self.root_command[:] = command
 
+    def get_root_command_reference(self):
+        if self.use_static_root_command:
+            return self._static_root_command()[..., :5]
+        if self.use_command_override:
+            return self.command_override[..., :5]
+        if self.teleop_obs_source == "udp":
+            return self._command_from_udp()[..., :5]
+        return self._command_from_motion()[..., :5]
+
     def get_root_and_wrist_6d_reference(self):
+        if self.use_root_and_wrist_6d_reference_override:
+            return self.root_and_wrist_6d_reference_override
         if self.teleop_obs_source == "udp":
             return self._root_and_wrist_6d_from_udp()
         return self._root_and_wrist_6d_from_motion()
