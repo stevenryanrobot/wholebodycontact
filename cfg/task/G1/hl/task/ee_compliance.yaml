@@ -16,7 +16,7 @@ reward:
   ee_compliance:
     ee_force_compliance_tracking:
       weight: 5.0
-      stiffness: 60.0
-      sigma: 0.08
+      stiffness: 200.0
+      sigma: 0.10
       max_offset: 0.25
-      force_deadband: 2.0
+      force_deadband: 5.0

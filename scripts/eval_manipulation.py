@@ -32,6 +32,7 @@ from torchrl.envs.utils import set_exploration_type, ExplorationType
 from scripts.utils.play import play
 from scripts.utils.helpers import make_env_policy
 from active_adaptation.utils.math import (
+    clamp_norm,
     quat_apply_inverse,
     quat_mul,
     quat_conjugate,
@@ -106,6 +107,43 @@ def _summary(values: torch.Tensor) -> dict:
         "min": float(flat.min().item()),
         "std": float(flat.std(unbiased=False).item()),
     }
+
+
+def _get_ee_compliance_params(cfg) -> dict:
+    reward_cfg = OmegaConf.select(cfg, "task.reward.ee_compliance.ee_force_compliance_tracking")
+    found = reward_cfg is not None
+    reward_cfg = reward_cfg or {}
+    return {
+        "found_in_cfg": found,
+        "stiffness": float(reward_cfg.get("stiffness", 60.0)),
+        "max_offset": float(reward_cfg.get("max_offset", 0.25)),
+        "force_deadband": float(reward_cfg.get("force_deadband", 2.0)),
+    }
+
+
+def _compute_ee_compliance_target_b(command_manager, asset, body_ids: list[int], nominal_target_b: torch.Tensor, params: dict):
+    force_w = torch.zeros_like(nominal_target_b)
+    force_apply_idx = getattr(command_manager, "force_apply_idx_asset", None)
+    force_applied_w = getattr(command_manager, "force_applied_w", None)
+
+    if force_apply_idx is not None and force_applied_w is not None:
+        force_apply_list = force_apply_idx.detach().cpu().tolist()
+        for ee_i, body_i in enumerate(body_ids):
+            if body_i in force_apply_list:
+                force_i = force_apply_list.index(body_i)
+                force_w[:, ee_i] = force_applied_w[:, force_i]
+
+    root_quat = asset.data.root_quat_w.unsqueeze(1).expand(-1, len(body_ids), -1)
+    force_b = quat_apply_inverse(root_quat, force_w)
+    force_norm = force_b.norm(dim=-1, keepdim=True)
+    active_force = torch.where(
+        force_norm > params["force_deadband"],
+        force_b,
+        torch.zeros_like(force_b),
+    )
+    target_offset_b = clamp_norm(active_force / params["stiffness"], max=params["max_offset"])
+    compliance_target_b = nominal_target_b + target_offset_b
+    return compliance_target_b, target_offset_b, force_b
 
 
 def _set_ee_command(command_manager, command: torch.Tensor):
@@ -265,6 +303,7 @@ def evaluate_ee_tracking(cfg, args):
             print("Default feet command enabled for EE tracking eval.", flush=True)
         default_pos_b, default_quat_b = _body_pose_in_root_frame(asset, body_ids)
         sample_center_b = _get_ee_sample_center(default_pos_b, base_env.device)
+        compliance_params = _get_ee_compliance_params(cfg)
         target_quat_b = torch.zeros_like(default_quat_b)
         target_quat_b[..., 0] = 1.0
         target_axis_angle_b = torch.zeros(base_env.num_envs, 2, 3, device=base_env.device)
@@ -283,6 +322,14 @@ def evaluate_ee_tracking(cfg, args):
             "EE sample center_b env0 "
             f"default={default_pos_b[0].detach().cpu().tolist()} "
             f"used={sample_center_b[0].detach().cpu().tolist()}",
+            flush=True,
+        )
+        print(
+            "EE compliance target params "
+            f"stiffness={compliance_params['stiffness']}, "
+            f"max_offset={compliance_params['max_offset']}, "
+            f"force_deadband={compliance_params['force_deadband']} "
+            f"(from_cfg={compliance_params['found_in_cfg']})",
             flush=True,
         )
 
@@ -318,30 +365,49 @@ def evaluate_ee_tracking(cfg, args):
 
                 actual_pos_b, actual_quat_b = _body_pose_in_root_frame(asset, body_ids)
                 pos_error = (actual_pos_b - target_pos_b[point_idx]).norm(dim=-1)
+                compliance_target_b, compliance_offset_b, force_b = _compute_ee_compliance_target_b(
+                    command_manager,
+                    asset,
+                    body_ids,
+                    target_pos_b[point_idx],
+                    compliance_params,
+                )
+                compliance_pos_error = (actual_pos_b - compliance_target_b).norm(dim=-1)
                 rpy_error = torch.rad2deg(_wrap_to_pi(_quat_to_rpy_wxyz(actual_quat_b) - target_rpy_b).abs())
                 quat_error = _quat_angle_error_deg(actual_quat_b, target_quat_b)
 
                 records.append({
                     "point_index": point_idx,
                     "target_pos_b": target_pos_b[point_idx].detach().cpu().tolist(),
+                    "compliance_target_pos_b": compliance_target_b.detach().cpu().tolist(),
+                    "compliance_offset_b": compliance_offset_b.detach().cpu().tolist(),
+                    "ee_force_b": force_b.detach().cpu().tolist(),
                     "actual_pos_b": actual_pos_b.detach().cpu().tolist(),
                     "target_quat_b_wxyz": target_quat_b.detach().cpu().tolist(),
                     "target_axis_angle_b": target_axis_angle_b.detach().cpu().tolist(),
                     "target_rpy_b_deg": torch.rad2deg(target_rpy_b).detach().cpu().tolist(),
                     "actual_rpy_b_deg": torch.rad2deg(_quat_to_rpy_wxyz(actual_quat_b)).detach().cpu().tolist(),
                     "pos_error_m": pos_error.detach().cpu().tolist(),
+                    "compliance_pos_error_m": compliance_pos_error.detach().cpu().tolist(),
                     "rpy_abs_error_deg": rpy_error.detach().cpu().tolist(),
                     "quat_angle_error_deg": quat_error.detach().cpu().tolist(),
                 })
 
                 mean_l = pos_error[:, 0].mean().item()
                 mean_r = pos_error[:, 1].mean().item()
+                compliance_mean_l = compliance_pos_error[:, 0].mean().item()
+                compliance_mean_r = compliance_pos_error[:, 1].mean().item()
                 print(
                     f"EE point {point_idx + 1:02d}/{EE_TRACKING_NUM_POINTS}: "
-                    f"left_pos_err={mean_l:.4f} m, right_pos_err={mean_r:.4f} m"
+                    f"left_pos_err={mean_l:.4f} m, right_pos_err={mean_r:.4f} m, "
+                    f"compliance_left_err={compliance_mean_l:.4f} m, "
+                    f"compliance_right_err={compliance_mean_r:.4f} m"
                 )
 
         pos_errors = torch.tensor([r["pos_error_m"] for r in records])
+        compliance_pos_errors = torch.tensor([r["compliance_pos_error_m"] for r in records])
+        compliance_offsets = torch.tensor([r["compliance_offset_b"] for r in records])
+        ee_forces_b = torch.tensor([r["ee_force_b"] for r in records])
         rpy_errors = torch.tensor([r["rpy_abs_error_deg"] for r in records])
         quat_errors = torch.tensor([r["quat_angle_error_deg"] for r in records])
 
@@ -361,11 +427,28 @@ def evaluate_ee_tracking(cfg, args):
             "ee_points": EE_TRACKING_NUM_POINTS,
             "ee_hold_steps": EE_TRACKING_HOLD_STEPS,
             "ee_warmup_steps": EE_TRACKING_WARMUP_STEPS,
+            "external_force": args.external_force,
+            "ee_compliance_target": compliance_params,
             "summary": {
                 "position_error_m": {
                     "combined": _summary(pos_errors),
                     "left": _summary(pos_errors[:, :, 0]),
                     "right": _summary(pos_errors[:, :, 1]),
+                },
+                "compliance_position_error_m": {
+                    "combined": _summary(compliance_pos_errors),
+                    "left": _summary(compliance_pos_errors[:, :, 0]),
+                    "right": _summary(compliance_pos_errors[:, :, 1]),
+                },
+                "compliance_offset_norm_m": {
+                    "combined": _summary(compliance_offsets.norm(dim=-1)),
+                    "left": _summary(compliance_offsets[:, :, 0].norm(dim=-1)),
+                    "right": _summary(compliance_offsets[:, :, 1].norm(dim=-1)),
+                },
+                "ee_force_b_norm_n": {
+                    "combined": _summary(ee_forces_b.norm(dim=-1)),
+                    "left": _summary(ee_forces_b[:, :, 0].norm(dim=-1)),
+                    "right": _summary(ee_forces_b[:, :, 1].norm(dim=-1)),
                 },
                 "rpy_abs_error_deg": {
                     "combined": _summary(rpy_errors),
@@ -389,12 +472,24 @@ def evaluate_ee_tracking(cfg, args):
             json.dump(report, f, indent=2)
 
         pos = report["summary"]["position_error_m"]["combined"]
+        compliance_pos = report["summary"]["compliance_position_error_m"]["combined"]
+        compliance_offset = report["summary"]["compliance_offset_norm_m"]["combined"]
+        ee_force = report["summary"]["ee_force_b_norm_n"]["combined"]
         quat = report["summary"]["quat_angle_error_deg"]["combined"]
         rpy = report["summary"]["rpy_abs_error_deg"]["combined"]
         print("\n" + "=" * 60)
         print("EE TRACKING EVAL")
         print("=" * 60)
-        print(f"  Position error mean/rmse/max: {pos['mean']:.4f} / {pos['rmse']:.4f} / {pos['max']:.4f} m")
+        print(f"  Nominal position error mean/rmse/max: {pos['mean']:.4f} / {pos['rmse']:.4f} / {pos['max']:.4f} m")
+        print(
+            "  Compliance position error mean/rmse/max: "
+            f"{compliance_pos['mean']:.4f} / {compliance_pos['rmse']:.4f} / {compliance_pos['max']:.4f} m"
+        )
+        print(
+            "  Compliance offset norm mean/max: "
+            f"{compliance_offset['mean']:.4f} / {compliance_offset['max']:.4f} m"
+        )
+        print(f"  EE force_b norm mean/max: {ee_force['mean']:.2f} / {ee_force['max']:.2f} N")
         print(f"  RPY abs error mean/rmse/max: {rpy['mean']:.2f} / {rpy['rmse']:.2f} / {rpy['max']:.2f} deg")
         print(f"  Quat angle error mean/rmse/max: {quat['mean']:.2f} / {quat['rmse']:.2f} / {quat['max']:.2f} deg")
         print(f"  Report: {args.ee_output}")
