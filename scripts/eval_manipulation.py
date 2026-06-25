@@ -42,6 +42,7 @@ from active_adaptation.utils.math import (
 
 FILE_PATH = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(FILE_PATH, "..", "cfg")
+DEFAULT_EXTERNAL_FORCE_CFG = os.path.join(CONFIG_PATH, "eval", "external_force", "default_ee_net_pull.yaml")
 
 EE_TRACKING_SEED = 0
 EE_TRACKING_NUM_POINTS = 20
@@ -121,6 +122,48 @@ def _get_ee_compliance_params(cfg) -> dict:
     }
 
 
+def _tensor_summary(value: torch.Tensor) -> dict:
+    value = value.detach().float().reshape(-1).cpu()
+    return {
+        "mean": float(value.mean().item()),
+        "min": float(value.min().item()),
+        "max": float(value.max().item()),
+    }
+
+
+def _get_ee_compliance_eval_info(command_manager, params: dict) -> dict:
+    if params["found_in_cfg"]:
+        return {
+            "target_mode": "explicit_force_over_stiffness",
+            "actual_stiffness": params["stiffness"],
+            "force_limit": None,
+            "effective_stiffness": None,
+        }
+
+    if hasattr(command_manager, "force_keypoint_b"):
+        force_limit = None
+        effective_stiffness = None
+        if hasattr(command_manager, "force_safe_limit_tl"):
+            force_limit = _tensor_summary(command_manager.force_safe_limit_tl.current)
+            effective_stiffness = {
+                key: val / 0.05
+                for key, val in force_limit.items()
+            }
+        return {
+            "target_mode": "low_level_force_keypoint_b",
+            "actual_stiffness": None,
+            "force_limit": force_limit,
+            "effective_stiffness": effective_stiffness,
+        }
+
+    return {
+        "target_mode": "fallback_force_over_stiffness",
+        "actual_stiffness": params["stiffness"],
+        "force_limit": None,
+        "effective_stiffness": None,
+    }
+
+
 def _compute_ee_compliance_target_b(command_manager, asset, body_ids: list[int], nominal_target_b: torch.Tensor, params: dict):
     force_w = torch.zeros_like(nominal_target_b)
     force_apply_idx = getattr(command_manager, "force_apply_idx_asset", None)
@@ -135,6 +178,21 @@ def _compute_ee_compliance_target_b(command_manager, asset, body_ids: list[int],
 
     root_quat = asset.data.root_quat_w.unsqueeze(1).expand(-1, len(body_ids), -1)
     force_b = quat_apply_inverse(root_quat, force_w)
+    if not params["found_in_cfg"] and force_apply_idx is not None and hasattr(command_manager, "force_keypoint_b"):
+        compliance_target_b = nominal_target_b.clone()
+        force_apply_list = force_apply_idx.detach().cpu().tolist()
+        active_force = force_b.norm(dim=-1, keepdim=True) > params["force_deadband"]
+        for ee_i, body_i in enumerate(body_ids):
+            if body_i in force_apply_list:
+                force_i = force_apply_list.index(body_i)
+                compliance_target_b[:, ee_i] = torch.where(
+                    active_force[:, ee_i],
+                    command_manager.force_keypoint_b[:, force_i],
+                    nominal_target_b[:, ee_i],
+                )
+        target_offset_b = compliance_target_b - nominal_target_b
+        return compliance_target_b, target_offset_b, force_b
+
     force_norm = force_b.norm(dim=-1, keepdim=True)
     active_force = torch.where(
         force_norm > params["force_deadband"],
@@ -198,6 +256,40 @@ def _configure_external_force(cfg, enabled: bool):
             f"  External force: off requested, but command target does not support it: {command_target}"
         )
     return False
+
+
+def _apply_external_force_mode(cfg, mode: str):
+    if mode == "default":
+        external_force_cfg = OmegaConf.load(DEFAULT_EXTERNAL_FORCE_CFG)
+        command_overrides = external_force_cfg.get("command", {})
+        cfg["task"]["command"].update(command_overrides)
+        print(f"  External force config: default ({DEFAULT_EXTERNAL_FORCE_CFG})")
+
+    enabled = mode != "off"
+    return _configure_external_force(cfg, enabled)
+
+
+def _uses_hierarchical_action_cfg(cfg) -> bool:
+    action_cfg = cfg["task"].get("action", {})
+    return action_cfg.get("_target_", "") == "active_adaptation.envs.mdp.action.HierarchicalRootCommand"
+
+
+def _fix_low_level_force_limit_for_ee_eval(cfg):
+    if _uses_hierarchical_action_cfg(cfg):
+        return None
+    if OmegaConf.select(cfg, "task.reward.ee_compliance.ee_force_compliance_tracking.stiffness") is not None:
+        return None
+
+    command_cfg = cfg["task"]["command"]
+    if "force_safe_default" not in command_cfg:
+        command_cfg["force_safe_default"] = 10.0
+    force_limit = float(command_cfg["force_safe_default"])
+    command_cfg["force_safe_bounds"] = [force_limit, force_limit]
+    print(
+        "  Low-level EE eval: fixed force_safe_limit "
+        f"to default {force_limit:.2f} because no EE compliance stiffness config was found."
+    )
+    return force_limit
 
 
 def _enable_root_passthrough_for_ee_only_hl(cfg):
@@ -283,7 +375,7 @@ def evaluate_ee_tracking(cfg, args):
         asset = base_env.scene["robot"]
         command_manager = base_env.command_manager
         action_manager = base_env.action_manager
-        _set_external_force(command_manager, args.external_force == "on")
+        _set_external_force(command_manager, args.external_force != "off")
 
         body_names = [name.strip() for name in EE_TRACKING_BODY_NAMES.split(",")]
         try:
@@ -304,6 +396,7 @@ def evaluate_ee_tracking(cfg, args):
         default_pos_b, default_quat_b = _body_pose_in_root_frame(asset, body_ids)
         sample_center_b = _get_ee_sample_center(default_pos_b, base_env.device)
         compliance_params = _get_ee_compliance_params(cfg)
+        compliance_eval_info = _get_ee_compliance_eval_info(command_manager, compliance_params)
         target_quat_b = torch.zeros_like(default_quat_b)
         target_quat_b[..., 0] = 1.0
         target_axis_angle_b = torch.zeros(base_env.num_envs, 2, 3, device=base_env.device)
@@ -324,14 +417,37 @@ def evaluate_ee_tracking(cfg, args):
             f"used={sample_center_b[0].detach().cpu().tolist()}",
             flush=True,
         )
-        print(
-            "EE compliance target params "
-            f"stiffness={compliance_params['stiffness']}, "
-            f"max_offset={compliance_params['max_offset']}, "
-            f"force_deadband={compliance_params['force_deadband']} "
-            f"(from_cfg={compliance_params['found_in_cfg']})",
-            flush=True,
-        )
+        print("EE compliance target mode: " + compliance_eval_info["target_mode"], flush=True)
+        if compliance_eval_info["actual_stiffness"] is not None:
+            print(
+                "EE compliance actual stiffness "
+                f"{compliance_eval_info['actual_stiffness']:.2f}; "
+                f"max_offset={compliance_params['max_offset']}, "
+                f"force_deadband={compliance_params['force_deadband']} "
+                f"(from_cfg={compliance_params['found_in_cfg']})",
+                flush=True,
+            )
+        elif compliance_eval_info["effective_stiffness"] is not None:
+            force_limit = compliance_eval_info["force_limit"]
+            effective_stiffness = compliance_eval_info["effective_stiffness"]
+            print(
+                "EE compliance effective low-level stiffness "
+                f"mean/min/max={effective_stiffness['mean']:.2f}/"
+                f"{effective_stiffness['min']:.2f}/"
+                f"{effective_stiffness['max']:.2f} N/m "
+                f"from force_safe_limit mean/min/max={force_limit['mean']:.2f}/"
+                f"{force_limit['min']:.2f}/"
+                f"{force_limit['max']:.2f} N; "
+                f"force_deadband={compliance_params['force_deadband']}",
+                flush=True,
+            )
+        else:
+            print(
+                "EE compliance actual stiffness unavailable; "
+                f"fallback stiffness={compliance_params['stiffness']}, "
+                f"force_deadband={compliance_params['force_deadband']}",
+                flush=True,
+            )
 
         offsets = _sample_uniform_ball(
             EE_TRACKING_NUM_POINTS,
@@ -428,7 +544,9 @@ def evaluate_ee_tracking(cfg, args):
             "ee_hold_steps": EE_TRACKING_HOLD_STEPS,
             "ee_warmup_steps": EE_TRACKING_WARMUP_STEPS,
             "external_force": args.external_force,
+            "external_force_default_cfg": DEFAULT_EXTERNAL_FORCE_CFG if args.external_force == "default" else None,
             "ee_compliance_target": compliance_params,
+            "ee_compliance_eval_info": compliance_eval_info,
             "summary": {
                 "position_error_m": {
                     "combined": _summary(pos_errors),
@@ -517,8 +635,8 @@ def main():
                         help="Observation source for command/root_and_wrist_6d in play mode")
     parser.add_argument("--ee_tracking_eval", "--ee-tracking-eval", action="store_true", default=False,
                         help="Evaluate EE tracking accuracy with scripted random EE commands")
-    parser.add_argument("--external_force", choices=["on", "off"], default="on",
-                        help="Enable or disable external forces for supported motion-tracking impedance commands")
+    parser.add_argument("--external_force", choices=["on", "off", "default"], default="on",
+                        help="External force mode: on uses run cfg, off disables it, default loads the shared eval force cfg")
     parser.add_argument("--ee_output", type=str, default=None, help="Path to write EE tracking JSON report")
     args = parser.parse_args()
 
@@ -602,8 +720,7 @@ def main():
         cfg["task"]["command"] = _cfg.task.command
         cfg["task"]["flags"] = _cfg.task.flags
 
-    external_force_enabled = args.external_force == "on"
-    _configure_external_force(cfg, external_force_enabled)
+    _apply_external_force_mode(cfg, args.external_force)
 
     if args.ee_tracking_eval:
         cfg["app"]["headless"] = not args.play
@@ -619,6 +736,8 @@ def main():
         elif command_target.startswith("active_adaptation.envs.mdp.commands.motion_tracking."):
             cfg["task"]["command"]["disable_motion_finish"] = True
             cfg["task"]["command"]["teleop"] = {"enabled": False, "obs_source": "motion"}
+
+        fixed_low_level_force_limit = _fix_low_level_force_limit_for_ee_eval(cfg)
 
         if "init_noise" in cfg["task"]["command"]:
             cfg["task"]["command"]["init_noise"] = {
@@ -650,6 +769,8 @@ def main():
         print(f"  Hold steps: {EE_TRACKING_HOLD_STEPS}")
         print(f"  EE bodies: {EE_TRACKING_BODY_NAMES}")
         print(f"  External force: {args.external_force}")
+        if fixed_low_level_force_limit is not None:
+            print(f"  Low-level force limit: fixed at {fixed_low_level_force_limit:.2f}")
         print("="*60 + "\n")
 
         evaluate_ee_tracking(cfg, args)
