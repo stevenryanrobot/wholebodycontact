@@ -1,11 +1,20 @@
 from math import inf
 import torch
 import abc
-from typing import TYPE_CHECKING, Callable, List, Tuple
+from typing import TYPE_CHECKING, Callable, List, Sequence, Tuple
 
 import isaaclab.utils.string as string_utils
 from isaaclab.utils.string import resolve_matching_names
-from active_adaptation.utils.math import quat_apply, quat_apply_inverse, yaw_quat, normalize, clamp_norm
+from active_adaptation.utils.math import (
+    clamp_norm,
+    normalize,
+    axis_angle_from_quat,
+    quat_apply,
+    quat_apply_inverse,
+    quat_conjugate,
+    quat_mul,
+    yaw_quat,
+)
 from ..commands import *
 
 if TYPE_CHECKING:
@@ -421,6 +430,62 @@ class ee_force_compliance_tracking(Reward):
         )
         error = (actual_ee_b - compliance_target_b).norm(dim=-1).mean(dim=-1, keepdim=True)
         return torch.exp(-error / self.sigma)
+
+
+class ee_orientation_tracking(Reward):
+    def __init__(
+        self,
+        env,
+        weight: float,
+        sigma: Sequence[float] = (1.0, 0.5),
+        enabled: bool = True,
+    ):
+        super().__init__(env, weight, enabled)
+        self.asset: Articulation = self.env.scene["robot"]
+        self.sigma = tuple(float(value) for value in sigma)
+        self.ee_names = ["left_hand_mimic", "right_hand_mimic"]
+
+    def compute(self) -> torch.Tensor:
+        command = self.env.command_manager
+        if not hasattr(command, "get_root_and_wrist_6d_reference"):
+            return torch.zeros(self.num_envs, 1, device=self.device)
+
+        try:
+            asset_idx = torch.tensor(
+                [self.asset.body_names.index(name) for name in self.ee_names],
+                device=self.device,
+                dtype=torch.long,
+            )
+        except ValueError:
+            return torch.zeros(self.num_envs, 1, device=self.device)
+
+        reference = command.get_root_and_wrist_6d_reference()
+        target_axis_angle = reference[:, 6:12].reshape(self.num_envs, 2, 3)
+        target_angle = target_axis_angle.norm(dim=-1)
+        half_angle = 0.5 * target_angle
+        scale = torch.where(
+            target_angle > 1e-6,
+            torch.sin(half_angle) / target_angle,
+            0.5 - target_angle.square() / 48.0,
+        )
+        target_quat_b = torch.cat(
+            [torch.cos(half_angle).unsqueeze(-1), target_axis_angle * scale.unsqueeze(-1)],
+            dim=-1,
+        )
+
+        root_quat_w = self.asset.data.root_quat_w.unsqueeze(1)
+        actual_quat_w = self.asset.data.body_quat_w[:, asset_idx, :]
+        actual_quat_b = quat_mul(
+            quat_conjugate(root_quat_w).expand(-1, 2, -1),
+            actual_quat_w,
+        )
+
+        orientation_diff = axis_angle_from_quat(
+            quat_mul(target_quat_b, quat_conjugate(actual_quat_b))
+        )
+        error = orientation_diff.norm(dim=-1).mean(dim=-1, keepdim=True)
+        rewards = [torch.exp(-error / sigma) for sigma in self.sigma]
+        return sum(rewards) / len(rewards)
 
 
 class root_force_velocity_tracking(Reward):

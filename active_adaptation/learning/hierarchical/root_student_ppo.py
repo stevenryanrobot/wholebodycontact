@@ -214,6 +214,7 @@ class RootStudentPPOPolicy(TensorDictModuleBase):
         if self.cfg.phase == "train":
             info = self._ppo_update(td, actor=self.actor_teacher, encoder=self.encoder_priv, opt_actor=self.opt_teacher)
             info.update(self._train_estimator(td))
+            self._copy_teacher_to_student()
         elif self.cfg.phase == "finetune":
             info = self._ppo_update(td, actor=self.actor_student, encoder=self.adapt_module, opt_actor=self.opt_student)
         else:
@@ -350,6 +351,7 @@ class RootStudentPPOPolicy(TensorDictModuleBase):
             encoder_priv=encoder_priv.state_dict(),
             adapt_module=adapt_module.state_dict(),
             critic=critic.state_dict(),
+            last_phase=self.cfg.phase,
             _meta={
                 "current_lr": self.current_lr,
                 "entropy_coef": self.entropy_coef,
@@ -372,9 +374,20 @@ class RootStudentPPOPolicy(TensorDictModuleBase):
         adapt_module.load_state_dict(state_dict.get("adapt_module", {}), strict=strict)
         critic.load_state_dict(state_dict.get("critic", {}), strict=strict)
 
+        last_phase = state_dict.get("last_phase", "train")
+        if last_phase == "train":
+            self._copy_teacher_to_student()
+
         meta = state_dict.get("_meta", {})
-        self.current_lr = meta.get("current_lr", self.current_lr)
-        self.entropy_coef = meta.get("entropy_coef", self.entropy_coef)
-        self.reg_lambda = meta.get("reg_lambda", self.reg_lambda)
-        self.progress = meta.get("progress", self.progress)
-        self.num_updates = meta.get("num_updates", self.num_updates)
+        if last_phase == self.cfg.phase:
+            self.current_lr = meta.get("current_lr", self.current_lr)
+            self.entropy_coef = meta.get("entropy_coef", self.entropy_coef)
+            self.reg_lambda = meta.get("reg_lambda", self.reg_lambda)
+            self.progress = meta.get("progress", self.progress)
+            self.num_updates = meta.get("num_updates", self.num_updates)
+
+    @torch.no_grad()
+    def _copy_teacher_to_student(self):
+        actor_teacher = self.actor_teacher.module if isinstance(self.actor_teacher, DDP) else self.actor_teacher
+        actor_student = self.actor_student.module if isinstance(self.actor_student, DDP) else self.actor_student
+        actor_student.load_state_dict(actor_teacher.state_dict())
