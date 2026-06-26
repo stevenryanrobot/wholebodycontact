@@ -8,5 +8,11 @@ defaults:
   - _self_
 
 observation:
+  hl_policy:
+    ee_compliance_state: {enabled: false}
   hl_priv:
     net_pull_force_priv: {}
+    ee_compliance_state:
+      stiffness: ${task.reward.ee_compliance.ee_force_compliance_tracking.stiffness}
+      max_offset: ${task.reward.ee_compliance.ee_force_compliance_tracking.max_offset}
+      force_deadband: ${task.reward.ee_compliance.ee_force_compliance_tracking.force_deadband}

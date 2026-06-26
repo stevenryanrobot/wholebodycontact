@@ -8,6 +8,11 @@ observation:
   hl_policy:
     root_and_wrist_6d: {enabled: false}
     root_and_wrist_6d_reference: {}
+    ee_compliance_state:
+      stiffness: ${task.reward.ee_compliance.ee_force_compliance_tracking.stiffness}
+      max_offset: ${task.reward.ee_compliance.ee_force_compliance_tracking.max_offset}
+      force_deadband: ${task.reward.ee_compliance.ee_force_compliance_tracking.force_deadband}
+    prev_high_actions: {steps: 3}
 
 reward:
   root_hold:
@@ -21,5 +26,6 @@ reward:
       max_offset: 0.25
       force_deadband: 5.0
     ee_orientation_tracking:
-      weight: 2.0
+      weight: 0.0
       sigma: [1.0, 0.5]
+      enabled: false

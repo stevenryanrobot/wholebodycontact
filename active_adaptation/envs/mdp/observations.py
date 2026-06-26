@@ -6,7 +6,7 @@ from typing import Tuple, TYPE_CHECKING, Callable
 
 from isaaclab.utils.string import resolve_matching_names
 import active_adaptation
-from active_adaptation.utils.math import quat_apply, quat_apply_inverse, yaw_quat, quat_mul, quat_conjugate
+from active_adaptation.utils.math import clamp_norm, quat_apply, quat_apply_inverse, yaw_quat, quat_mul, quat_conjugate
 import active_adaptation.utils.symmetry as sym_utils
 
 if TYPE_CHECKING:
@@ -338,6 +338,125 @@ class prev_actions(Observation):
     def symmetry_transforms(self):
         transform = self.action_manager.symmetry_transforms().repeat(self.steps)
         return transform
+
+class prev_high_actions(Observation):
+    """History of high-level commands before they are decoded for the low-level policy."""
+
+    def __init__(self, env, steps: int=1, flatten: bool=True):
+        super().__init__(env)
+        self.steps = steps
+        self.flatten = flatten
+        self.action_manager = self.env.action_manager
+
+    def compute(self):
+        action_buf = getattr(self.action_manager, "high_action_buf", None)
+        if action_buf is None:
+            raise RuntimeError("prev_high_actions requires an action manager with high_action_buf.")
+        action_buf = action_buf[:, :self.steps, :]
+        if self.flatten:
+            return action_buf.reshape(self.num_envs, -1)
+        return action_buf
+
+    def symmetry_transforms(self):
+        dim = self.action_manager.action_dim * self.steps
+        return sym_utils.SymmetryTransform(perm=torch.arange(dim), signs=torch.ones(dim))
+
+
+class ee_compliance_state(Observation):
+    """Privileged EE state using the same force-over-stiffness target as the reward."""
+
+    def __init__(
+        self,
+        env,
+        body_names=("left_hand_mimic", "right_hand_mimic"),
+        stiffness: float=60.0,
+        max_offset: float=0.25,
+        force_deadband: float=2.0,
+    ):
+        super().__init__(env)
+        self.asset: Articulation = self.env.scene["robot"]
+        self.body_names = list(body_names)
+        self.stiffness = float(stiffness)
+        self.max_offset = float(max_offset)
+        self.force_deadband = float(force_deadband)
+        if self.stiffness <= 0.0:
+            raise ValueError(f"ee_compliance_state stiffness must be positive, got {self.stiffness}.")
+
+        try:
+            self.motion_ids = torch.tensor(
+                [self.command_manager.dataset.body_names.index(name) for name in self.body_names],
+                device=self.device,
+                dtype=torch.long,
+            )
+            self.asset_ids = torch.tensor(
+                [self.asset.body_names.index(name) for name in self.body_names],
+                device=self.device,
+                dtype=torch.long,
+            )
+        except ValueError as exc:
+            raise ValueError(f"Could not resolve EE bodies {self.body_names}.") from exc
+
+    def _nominal_target_b(self):
+        motion = self.command_manager._motion
+        if hasattr(motion, "local_body_pos"):
+            return motion.local_body_pos[:, 0, self.motion_ids, :]
+        if hasattr(motion, "body_pos_b"):
+            return motion.body_pos_b[:, 0, self.motion_ids, :]
+        raise RuntimeError("ee_compliance_state needs local_body_pos or body_pos_b in the motion data.")
+
+    def _force_b(self):
+        force_w = torch.zeros(self.num_envs, len(self.asset_ids), 3, device=self.device)
+        force_apply_idx = getattr(self.command_manager, "force_apply_idx_asset", None)
+        force_applied_w = getattr(self.command_manager, "force_applied_w", None)
+        if force_apply_idx is None or force_applied_w is None:
+            return force_w
+
+        force_apply_list = force_apply_idx.tolist()
+        for ee_i, body_i in enumerate(self.asset_ids.tolist()):
+            if body_i in force_apply_list:
+                force_w[:, ee_i] = force_applied_w[:, force_apply_list.index(body_i)]
+        root_quat = self.asset.data.root_quat_w.unsqueeze(1).expand(-1, len(self.asset_ids), -1)
+        return quat_apply_inverse(root_quat, force_w)
+
+    def compute(self):
+        root_pos = self.asset.data.root_pos_w.unsqueeze(1)
+        root_quat = self.asset.data.root_quat_w.unsqueeze(1).expand(-1, len(self.asset_ids), -1)
+        actual_pos_b = quat_apply_inverse(
+            root_quat,
+            self.asset.data.body_pos_w[:, self.asset_ids, :] - root_pos,
+        )
+        actual_vel_b = quat_apply_inverse(
+            root_quat,
+            self.asset.data.body_lin_vel_w[:, self.asset_ids, :]
+            - self.asset.data.root_lin_vel_w.unsqueeze(1),
+        )
+        nominal_target_b = self._nominal_target_b()
+        force_b = self._force_b()
+        active = force_b.norm(dim=-1, keepdim=True) > self.force_deadband
+        active_force_b = torch.where(active, force_b, torch.zeros_like(force_b))
+        target_offset_b = clamp_norm(active_force_b / self.stiffness, max=self.max_offset)
+        compliance_target_b = nominal_target_b + target_offset_b
+        error_b = compliance_target_b - actual_pos_b
+
+        return torch.cat(
+            [
+                actual_pos_b.flatten(1),
+                actual_vel_b.flatten(1),
+                nominal_target_b.flatten(1),
+                compliance_target_b.flatten(1),
+                error_b.flatten(1),
+                force_b.flatten(1),
+                active.float().flatten(1),
+            ],
+            dim=-1,
+        )
+
+    def symmetry_transforms(self):
+        # RootPPO currently does not apply symmetry augmentation. Keep a valid
+        # transform here so observation-spec/debug utilities can still inspect it.
+        dim = self.compute().shape[-1]
+        return sym_utils.SymmetryTransform(perm=torch.arange(dim), signs=torch.ones(dim))
+
 
 class applied_action(JointObs):
     def __init__(self, env):

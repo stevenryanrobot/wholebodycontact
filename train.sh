@@ -3,9 +3,9 @@ set -euo pipefail
 
 # ===== Global Configuration =====
 PROJECT="luoxinyuan-duke-university/gentle_humanoid"
-export CUDA_VISIBLE_DEVICES=0,1,2,3
+export CUDA_VISIBLE_DEVICES=0
 MASTER_PORT=29500
-NPROC=4
+NPROC=1
 SCRIPT="scripts/train.py"
 
 run_pipeline() {
@@ -40,7 +40,7 @@ run_pipeline() {
 }
 
 # run_pipeline "G1/G1_gentle" "gentle" "ablation"
-run_pipeline "G1/G1_gentle" "gentle" "5point"
+run_pipeline "G1/G1_gentle" "gentle" "test1939"
 # run_pipeline "G1/G1_gentle" "gentle" "safe_hand"
 
 # run_pipeline "G1/G1_no_force" "noforce" "motion_tracking_RL"

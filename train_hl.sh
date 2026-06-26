@@ -3,9 +3,9 @@ set -euo pipefail
 
 LOW_PROJECT_PATH="luoxinyuan-duke-university/gentle_humanoid"
 HL_WANDB_PROJECT="gentle_humanoid_high_level"
-CUDA_VISIBLE_DEVICES="0,1"
+CUDA_VISIBLE_DEVICES="0"
 MASTER_PORT="29501"
-NPROC="2"
+NPROC="1"
 
 ALGO="root_ppo"
 TASK="G1/G1_hl_ee_compliance"
