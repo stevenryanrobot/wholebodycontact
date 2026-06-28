@@ -49,7 +49,8 @@ command:
       # - amass_full_safe_hand
       # - amass
       # - limmt_gentle_amass_full
-      - limmt_no_foot_gentle_amass_full
+      # - limmt_no_foot_gentle_amass_full
+      - sim_rollout_motion_future5_from_finetune
     path_weights:
       # - 0.4
       # - 0.2

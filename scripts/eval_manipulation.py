@@ -132,6 +132,17 @@ def _tensor_summary(value: torch.Tensor) -> dict:
 
 
 def _get_ee_compliance_eval_info(command_manager, params: dict) -> dict:
+    if (
+        getattr(command_manager, "external_force_mode", "legacy") == "net_pull"
+        and hasattr(command_manager, "get_net_pull_ee_compliance_target_b")
+    ):
+        return {
+            "target_mode": "net_pull_dynamic_ee_compliance_target_b",
+            "actual_stiffness": params["stiffness"],
+            "force_limit": None,
+            "effective_stiffness": None,
+        }
+
     if params["found_in_cfg"]:
         return {
             "target_mode": "explicit_force_over_stiffness",
@@ -165,6 +176,18 @@ def _get_ee_compliance_eval_info(command_manager, params: dict) -> dict:
 
 
 def _compute_ee_compliance_target_b(command_manager, asset, body_ids: list[int], nominal_target_b: torch.Tensor, params: dict):
+    if (
+        getattr(command_manager, "external_force_mode", "legacy") == "net_pull"
+        and hasattr(command_manager, "get_net_pull_ee_compliance_target_b")
+    ):
+        compliance_target_b = command_manager.get_net_pull_ee_compliance_target_b()
+        if hasattr(command_manager, "get_net_pull_ee_force_b"):
+            force_b = command_manager.get_net_pull_ee_force_b()
+        else:
+            force_b = torch.zeros_like(nominal_target_b)
+        target_offset_b = compliance_target_b - nominal_target_b
+        return compliance_target_b, target_offset_b, force_b
+
     force_w = torch.zeros_like(nominal_target_b)
     force_apply_idx = getattr(command_manager, "force_apply_idx_asset", None)
     force_applied_w = getattr(command_manager, "force_applied_w", None)

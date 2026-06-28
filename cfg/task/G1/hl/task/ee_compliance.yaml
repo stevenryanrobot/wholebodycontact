@@ -1,6 +1,9 @@
 command:
   force_active_pattern:
     - ".*hand_mimic"
+  net_pull_ee_compliance_stiffness: ${task.reward.ee_compliance.ee_force_compliance_tracking.stiffness}
+  net_pull_ee_compliance_max_offset: ${task.reward.ee_compliance.ee_force_compliance_tracking.max_offset}
+  net_pull_ee_compliance_force_deadband: ${task.reward.ee_compliance.ee_force_compliance_tracking.force_deadband}
   reward_sigma:
     feet: [0.2]
 

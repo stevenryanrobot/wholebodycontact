@@ -1392,6 +1392,9 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         net_pull_ramp_down_range: Sequence[int] = (25, 75),
         net_pull_rest_range: Sequence[int] = (50, 150),
         net_pull_xy_only: bool = True,
+        net_pull_ee_compliance_stiffness: float = 200.0,
+        net_pull_ee_compliance_max_offset: float = 0.25,
+        net_pull_ee_compliance_force_deadband: float = 5.0,
         external_force_enabled: bool = True,
         force_apply_pattern: Sequence[str] | None = None,
         force_active_pattern: Sequence[str] | None = None,
@@ -1575,9 +1578,18 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         self.net_pull_ramp_down_range = tuple(int(x) for x in net_pull_ramp_down_range)
         self.net_pull_rest_range = tuple(int(x) for x in net_pull_rest_range)
         self.net_pull_xy_only = net_pull_xy_only
+        self.net_pull_ee_compliance_stiffness = float(net_pull_ee_compliance_stiffness)
+        self.net_pull_ee_compliance_max_offset = float(net_pull_ee_compliance_max_offset)
+        self.net_pull_ee_compliance_force_deadband = float(net_pull_ee_compliance_force_deadband)
+        if self.net_pull_ee_compliance_stiffness <= 0.0:
+            raise ValueError(
+                "net_pull_ee_compliance_stiffness must be positive, got "
+                f"{self.net_pull_ee_compliance_stiffness}."
+            )
 
         self.configure_admittance()
         self.configure_net_pull()
+        self.configure_net_pull_ee_compliance()
 
     def set_external_force_enabled(self, enabled: bool):
         self.external_force_enabled = bool(enabled)
@@ -1596,6 +1608,10 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
                 self.net_pull_force_w.zero_()
             if hasattr(self, "net_pull_force_b"):
                 self.net_pull_force_b.zero_()
+            if hasattr(self, "net_pull_ee_force_b"):
+                self.net_pull_ee_force_b.zero_()
+            if hasattr(self, "update_net_pull_ee_compliance_target"):
+                self.update_net_pull_ee_compliance_target()
 
     def configure_net_pull(self):
         self.net_pull_idx_motion, self.net_pull_idx_asset = _match_indices(
@@ -1623,6 +1639,116 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
                 easing="linear",
                 clamp=(0.0, self.net_pull_force_range[1]),
             )
+
+    def configure_net_pull_ee_compliance(self):
+        self.net_pull_ee_names = ["left_hand_mimic", "right_hand_mimic"]
+        self.net_pull_ee_idx_motion = torch.tensor(
+            [self.dataset.body_names.index(name) for name in self.net_pull_ee_names],
+            device=self.device,
+            dtype=torch.long,
+        )
+        self.net_pull_ee_idx_asset = torch.tensor(
+            [self.asset.body_names.index(name) for name in self.net_pull_ee_names],
+            device=self.device,
+            dtype=torch.long,
+        )
+        self.net_pull_ee_admit = AdmittanceMassChain(
+            num_envs=self.num_envs,
+            num_points=len(self.net_pull_ee_names),
+            dt=self.env.physics_dt,
+            mixed_loop_steps=1,
+            device=self.device,
+            mass=0.1,
+            damping=2.0,
+            vel_clip=4.0,
+            acc_clip=1000.0,
+        )
+        with torch.device(self.device):
+            self.net_pull_ee_nominal_target_b = torch.zeros(self.num_envs, 2, 3, dtype=torch.float32)
+            self.net_pull_ee_nominal_target_b_prev = torch.zeros(self.num_envs, 2, 3, dtype=torch.float32)
+            self.net_pull_ee_compliance_target_b = torch.zeros(self.num_envs, 2, 3, dtype=torch.float32)
+            self.net_pull_ee_force_b = torch.zeros(self.num_envs, 2, 3, dtype=torch.float32)
+
+    def _net_pull_ee_nominal_from_motion(self):
+        if hasattr(self, "get_root_and_wrist_6d_reference"):
+            reference = self.get_root_and_wrist_6d_reference()
+            if reference.shape[-1] >= 6:
+                return reference[:, :6].reshape(self.num_envs, 2, 3)
+
+        motion = self._motion
+        if hasattr(motion, "local_body_pos"):
+            return motion.local_body_pos[:, 0, self.net_pull_ee_idx_motion, :]
+        if hasattr(motion, "body_pos_b"):
+            return motion.body_pos_b[:, 0, self.net_pull_ee_idx_motion, :]
+        raise RuntimeError("net-pull EE compliance needs local_body_pos or body_pos_b in the motion data.")
+
+    def _net_pull_ee_force_from_net_pull(self):
+        force_b = torch.zeros_like(self.net_pull_ee_force_b)
+        body_idx = self.net_pull_idx_asset[self.net_pull_body_local_idx]
+        for ee_i, asset_i in enumerate(self.net_pull_ee_idx_asset.tolist()):
+            mask = body_idx == asset_i
+            force_b[mask, ee_i] = self.net_pull_force_b[mask]
+        return force_b
+
+    def update_net_pull_ee_compliance_target(self):
+        if not hasattr(self, "_motion") and not hasattr(self, "get_root_and_wrist_6d_reference"):
+            return
+
+        nominal_target_b = self._net_pull_ee_nominal_from_motion()
+        self.net_pull_ee_nominal_target_b[:] = nominal_target_b
+
+        if self.last_reset_env_ids is not None:
+            self.net_pull_ee_nominal_target_b_prev[self.last_reset_env_ids] = nominal_target_b[self.last_reset_env_ids]
+        nominal_vel_b = (nominal_target_b - self.net_pull_ee_nominal_target_b_prev) / self.env.step_dt
+        self.net_pull_ee_nominal_target_b_prev[:] = nominal_target_b
+
+        force_b = self._net_pull_ee_force_from_net_pull() if self.external_force_enabled else torch.zeros_like(self.net_pull_ee_force_b)
+        active = force_b.norm(dim=-1, keepdim=True) > self.net_pull_ee_compliance_force_deadband
+        force_b = torch.where(active, force_b, torch.zeros_like(force_b))
+        self.net_pull_ee_force_b[:] = force_b
+
+        if self.last_reset_env_ids is not None:
+            self.net_pull_ee_admit.reset(
+                self.last_reset_env_ids,
+                x0_b=nominal_target_b[self.last_reset_env_ids],
+                v0_b=nominal_vel_b[self.last_reset_env_ids],
+            )
+
+        stiffness = torch.as_tensor(
+            self.net_pull_ee_compliance_stiffness,
+            device=self.device,
+            dtype=torch.float32,
+        )
+        mass = torch.as_tensor(self.net_pull_ee_admit.mass, device=self.device, dtype=torch.float32)
+        damping = 2.0 * torch.sqrt(stiffness * mass)
+
+        nominal_target_b_exp = nominal_target_b.unsqueeze(0)
+        nominal_vel_b_exp = nominal_vel_b.unsqueeze(0)
+        force_b_exp = force_b.unsqueeze(0)
+
+        for _ in range(4):
+            F_drive_b = (
+                stiffness * (nominal_target_b_exp - self.net_pull_ee_admit.x)
+                + damping * (nominal_vel_b_exp - self.net_pull_ee_admit.v)
+            )
+            self.net_pull_ee_admit.step(F_drive_b=F_drive_b, F_ext_b=force_b_exp)
+
+        target_b = self.net_pull_ee_admit.x[0]
+        offset_b = clamp_norm(
+            target_b - nominal_target_b,
+            max=self.net_pull_ee_compliance_max_offset,
+        )
+        self.net_pull_ee_compliance_target_b[:] = nominal_target_b + offset_b
+        self.net_pull_ee_admit.x[0] = self.net_pull_ee_compliance_target_b
+
+    def get_net_pull_ee_compliance_target_b(self):
+        return self.net_pull_ee_compliance_target_b
+
+    def get_net_pull_ee_nominal_target_b(self):
+        return self.net_pull_ee_nominal_target_b
+
+    def get_net_pull_ee_force_b(self):
+        return self.net_pull_ee_force_b
 
     def update_force_kp_matrix(self):
         diag = torch.cat([
@@ -1696,6 +1822,13 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         self.net_pull_force_b[env_ids] = 0.0
         self.net_pull_point_b[env_ids] = 0.0
         self.net_pull_force_tl.reset(env_ids, value=torch.zeros(env_ids.shape[0], 1, device=self.device))
+        if hasattr(self, "net_pull_ee_admit") and (hasattr(self, "_motion") or hasattr(self, "get_root_and_wrist_6d_reference")):
+            nominal_target_b = self._net_pull_ee_nominal_from_motion()
+            self.net_pull_ee_nominal_target_b[env_ids] = nominal_target_b[env_ids]
+            self.net_pull_ee_nominal_target_b_prev[env_ids] = nominal_target_b[env_ids]
+            self.net_pull_ee_compliance_target_b[env_ids] = nominal_target_b[env_ids]
+            self.net_pull_ee_force_b[env_ids] = 0.0
+            self.net_pull_ee_admit.reset(env_ids, x0_b=nominal_target_b[env_ids])
         if refresh_time:
             self.net_pull_phase_timer[env_ids] = random_uniform(
                 env_ids.shape[0],
@@ -2149,21 +2282,18 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
         self.force_applied_b.zero_()
         force_apply_idx_asset = self.force_apply_idx_asset.to(body_idx.device)
         legacy_matches = body_idx.unsqueeze(1) == force_apply_idx_asset.unsqueeze(0)
-        if not legacy_matches.any(dim=1).all():
-            missing_body_idx = body_idx[~legacy_matches.any(dim=1)].unique().tolist()
-            missing_body_names = get_items_by_index(self.asset.body_names, missing_body_idx)
-            raise RuntimeError(
-                f"net_pull bodies must also be present in force_apply_pattern, missing: {missing_body_names}"
-            )
-        legacy_slots = legacy_matches.int().argmax(dim=1)
         self.force_keypoint_b.zero_()
         self.force_expected_w.zero_()
         self.force_expected_b.zero_()
-        self.force_keypoint_b[env_ids, legacy_slots, :] = self.net_pull_point_b
-        self.force_applied_w[env_ids, legacy_slots, :] = self.net_pull_force_w
-        self.force_applied_b[env_ids, legacy_slots, :] = self.net_pull_force_b
-        self.force_expected_w[env_ids, legacy_slots, :] = self.net_pull_force_w
-        self.force_expected_b[env_ids, legacy_slots, :] = self.net_pull_force_b
+        matched_envs = legacy_matches.any(dim=1)
+        if matched_envs.any():
+            matched_slots = legacy_matches[matched_envs].int().argmax(dim=1)
+            matched_ids = env_ids[matched_envs]
+            self.force_keypoint_b[matched_ids, matched_slots, :] = self.net_pull_point_b[matched_envs]
+            self.force_applied_w[matched_ids, matched_slots, :] = self.net_pull_force_w[matched_envs]
+            self.force_applied_b[matched_ids, matched_slots, :] = self.net_pull_force_b[matched_envs]
+            self.force_expected_w[matched_ids, matched_slots, :] = self.net_pull_force_w[matched_envs]
+            self.force_expected_b[matched_ids, matched_slots, :] = self.net_pull_force_b[matched_envs]
 
         self.asset.has_external_wrench = False
         self.force_apply_world = True
@@ -2179,6 +2309,7 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
             self.net_pull_force_tl.update_time()
             self.net_pull_schedule()
             self.net_pull_update_target()
+            self.update_net_pull_ee_compliance_target()
         elif self.compliance:
             self.force_kp_tl.update_time()
             self.force_origin_tl.update_time()

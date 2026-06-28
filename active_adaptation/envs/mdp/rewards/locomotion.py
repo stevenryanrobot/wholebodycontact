@@ -406,22 +406,28 @@ class ee_force_compliance_tracking(Reward):
         else:
             return torch.zeros(self.num_envs, 1, device=self.device)
 
-        force_w = torch.zeros(self.num_envs, 2, 3, device=self.device)
-        force_apply_idx = getattr(command, "force_apply_idx_asset", torch.empty(0, device=self.device, dtype=torch.long))
-        force_applied_w = getattr(command, "force_applied_w", None)
-        if force_applied_w is not None:
-            force_apply_list = force_apply_idx.tolist()
-            for ee_i, body_i in enumerate(asset_idx.tolist()):
-                if body_i in force_apply_list:
-                    force_i = force_apply_list.index(body_i)
-                    force_w[:, ee_i] = force_applied_w[:, force_i]
-
         root_quat = self.asset.data.root_quat_w.unsqueeze(1)
-        force_b = quat_apply_inverse(root_quat.expand(-1, 2, -1), force_w)
-        force_norm = force_b.norm(dim=-1, keepdim=True)
-        active_force = torch.where(force_norm > self.force_deadband, force_b, torch.zeros_like(force_b))
-        target_offset_b = clamp_norm(active_force / self.stiffness, max=self.max_offset)
-        compliance_target_b = target_ee_b + target_offset_b
+        if (
+            getattr(command, "external_force_mode", "legacy") == "net_pull"
+            and hasattr(command, "get_net_pull_ee_compliance_target_b")
+        ):
+            compliance_target_b = command.get_net_pull_ee_compliance_target_b()
+        else:
+            force_w = torch.zeros(self.num_envs, 2, 3, device=self.device)
+            force_apply_idx = getattr(command, "force_apply_idx_asset", torch.empty(0, device=self.device, dtype=torch.long))
+            force_applied_w = getattr(command, "force_applied_w", None)
+            if force_applied_w is not None:
+                force_apply_list = force_apply_idx.tolist()
+                for ee_i, body_i in enumerate(asset_idx.tolist()):
+                    if body_i in force_apply_list:
+                        force_i = force_apply_list.index(body_i)
+                        force_w[:, ee_i] = force_applied_w[:, force_i]
+
+            force_b = quat_apply_inverse(root_quat.expand(-1, 2, -1), force_w)
+            force_norm = force_b.norm(dim=-1, keepdim=True)
+            active_force = torch.where(force_norm > self.force_deadband, force_b, torch.zeros_like(force_b))
+            target_offset_b = clamp_norm(active_force / self.stiffness, max=self.max_offset)
+            compliance_target_b = target_ee_b + target_offset_b
 
         actual_ee_w = self.asset.data.body_pos_w[:, asset_idx, :]
         actual_ee_b = quat_apply_inverse(

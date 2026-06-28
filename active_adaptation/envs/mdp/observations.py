@@ -405,6 +405,12 @@ class ee_compliance_state(Observation):
         raise RuntimeError("ee_compliance_state needs local_body_pos or body_pos_b in the motion data.")
 
     def _force_b(self):
+        if (
+            getattr(self.command_manager, "external_force_mode", "legacy") == "net_pull"
+            and hasattr(self.command_manager, "get_net_pull_ee_force_b")
+        ):
+            return self.command_manager.get_net_pull_ee_force_b()
+
         force_w = torch.zeros(self.num_envs, len(self.asset_ids), 3, device=self.device)
         force_apply_idx = getattr(self.command_manager, "force_apply_idx_asset", None)
         force_applied_w = getattr(self.command_manager, "force_applied_w", None)
@@ -417,6 +423,18 @@ class ee_compliance_state(Observation):
                 force_w[:, ee_i] = force_applied_w[:, force_apply_list.index(body_i)]
         root_quat = self.asset.data.root_quat_w.unsqueeze(1).expand(-1, len(self.asset_ids), -1)
         return quat_apply_inverse(root_quat, force_w)
+
+    def _compliance_target_b(self, nominal_target_b, force_b):
+        if (
+            getattr(self.command_manager, "external_force_mode", "legacy") == "net_pull"
+            and hasattr(self.command_manager, "get_net_pull_ee_compliance_target_b")
+        ):
+            return self.command_manager.get_net_pull_ee_compliance_target_b()
+
+        active = force_b.norm(dim=-1, keepdim=True) > self.force_deadband
+        active_force_b = torch.where(active, force_b, torch.zeros_like(force_b))
+        target_offset_b = clamp_norm(active_force_b / self.stiffness, max=self.max_offset)
+        return nominal_target_b + target_offset_b
 
     def compute(self):
         root_pos = self.asset.data.root_pos_w.unsqueeze(1)
@@ -433,9 +451,7 @@ class ee_compliance_state(Observation):
         nominal_target_b = self._nominal_target_b()
         force_b = self._force_b()
         active = force_b.norm(dim=-1, keepdim=True) > self.force_deadband
-        active_force_b = torch.where(active, force_b, torch.zeros_like(force_b))
-        target_offset_b = clamp_norm(active_force_b / self.stiffness, max=self.max_offset)
-        compliance_target_b = nominal_target_b + target_offset_b
+        compliance_target_b = self._compliance_target_b(nominal_target_b, force_b)
         error_b = compliance_target_b - actual_pos_b
 
         return torch.cat(

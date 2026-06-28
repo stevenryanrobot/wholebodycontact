@@ -8,5 +8,5 @@ action:
     enabled: false
   ee_command:
     enabled: true
-    pos_scale: [0.15, 0.15, 0.15]
+    pos_scale: [0.5, 0.5, 0.5]
     rot_scale: [0.5, 0.5, 0.5]

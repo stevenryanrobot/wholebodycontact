@@ -3,14 +3,14 @@ set -euo pipefail
 
 LOW_PROJECT_PATH="luoxinyuan-duke-university/gentle_humanoid"
 HL_WANDB_PROJECT="gentle_humanoid_high_level"
-CUDA_VISIBLE_DEVICES="0"
-MASTER_PORT="29501"
-NPROC="1"
+CUDA_VISIBLE_DEVICES="0,1"
+MASTER_PORT="29504"
+NPROC="2"
 
 ALGO="root_ppo"
 TASK="G1/G1_hl_ee_compliance"
-LOW_RUN_PATH="${LOW_PROJECT_PATH}/gentle_finetune_3point_amass_limmt_full_stiff30"
-RUN_NAME="hl_ee_compliance_stiff200_3kp_priv_amass_limmt_full_stiff600"
+LOW_RUN_PATH="${LOW_PROJECT_PATH}/gentle_3kp_stiff_finetune_limmt_full_force30"
+RUN_NAME="hl_ee_compliance_stiff200_3kp_priv_amass_limmt_full_verystiff"
 RUN_ID="${RUN_NAME}_$(date +%Y%m%d_%H%M%S)"
 
 export CUDA_VISIBLE_DEVICES
