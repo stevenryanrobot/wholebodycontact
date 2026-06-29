@@ -86,22 +86,22 @@ You should organize the processed datasets in the following structure:
 
 ### Dataset Building
 
-Modify `DATASET_ROOT` in `generate_dataset.sh` to point to your dataset root directory, then run the script to generate the dataset:
+Modify `DATASET_ROOT` in `bash/generate_dataset.sh` to point to your dataset root directory, then run the script (from the repo root) to generate the dataset:
 ```
-bash generate_dataset.sh
+bash bash/generate_dataset.sh
 ```
 
 The dataset will be generated in the `dataset/` directory, and the code will automatically load these datasets. You can also use the `MEMATH` environment variable to specify the dataset root path.
 
 ## Training
 
-You can use the provided `train.sh` script to run the full training pipeline. Modify the global configuration section in `train.sh` to set your WandB account and other parameters, then run:
+You can use the provided `bash/train.sh` script to run the full training pipeline. Modify the global configuration section in `bash/train.sh` to set your WandB account and other parameters, then run (from the repo root):
 
 ```bash
-bash train.sh
+bash bash/train.sh
 ```
 
-By default, `train.sh` trains the GentleHumanoid policy (with compliance). If you want to train a baseline tracking policy (without compliance), please uncomment the corresponding lines in `train.sh`:
+By default, `bash/train.sh` trains the GentleHumanoid policy (with compliance). If you want to train a baseline tracking policy (without compliance), please uncomment the corresponding lines in `bash/train.sh`:
 
 ```bash
 run_pipeline "G1/G1_gentle" "gt" "<date>" # by default, GentleHumanoid policy with compliance
@@ -110,7 +110,7 @@ run_pipeline "G1/G1_extreme_force" "extremeforce" "<date>" # baseline tracking p
 ```
 
 Under standard settings, training takes approximately 5 hours on 4× A100 GPUs.
-If GPU memory is constrained, it is recommended to appropriately tune the `NPROC` and `num_envs` parameters in `train.sh` and `cfg/task/G1/G1.yaml`, respectively.
+If GPU memory is constrained, it is recommended to appropriately tune the `NPROC` and `num_envs` parameters in `bash/train.sh` and `cfg/task/G1/G1.yaml`, respectively.
 Such adjustments may increase training time and could affect training performance to some extent.
 
 ## Evaluation
@@ -118,4 +118,41 @@ Such adjustments may increase training time and could affect training performanc
 ```bash
 python scripts/eval.py --run_path ${wandb_run_path} -p # p for play
 python scripts/eval.py --run_path ${wandb_run_path} -p --export # export the policy to onnx (sim2real)
+```
+
+## Whole-Body Contact: proprioceptive force sensing
+
+This fork adds the ability for the robot to *sense* where on its body an
+external force is applied, **using proprioception only** (no force/torque
+sensor). The locomotion policy is **not** trained — only a small supervised MLP
+that maps proprioception → (which body link is pushed, 3D force vector). When
+the PD controller fights an external push, the deviation in joint torques and
+tracking errors carries the signal; the MLP learns to decode it.
+
+Workflow (run inside the `gentle` env; `source start_gentle_local.sh` first):
+
+```bash
+# 1. Collect data: drive a frozen (preferably stiff) low-level policy under
+#    random whole-body forces and log (proprioception, force-label) to HDF5.
+python scripts/collect_force_data.py -r ${low_level_wandb_run_path} \
+    -n 30000 --num_envs 64 -o data/wbc/wbc_train.h5
+
+# 2. Train the force-sensing MLP (no Isaac needed).
+python scripts/train_force_sensor.py --data data/wbc/wbc_train.h5 \
+    --out data/wbc/force_sensor.pt --epochs 40
+```
+
+- Force application and labels reuse the existing `net_pull` external-force mode
+  (see `cfg/wbc/collect.yaml`); `net_pull_force_priv` is the ground-truth label.
+- Use a stiff, non-compliant low-level policy for collection — a compliant
+  controller gives way and washes out the proprioceptive signal.
+
+## Repository layout
+
+```
+active_adaptation/   core library (envs, MDP terms, learning algorithms)
+cfg/                 Hydra configs (tasks, training, whole-body-contact in cfg/wbc/)
+scripts/             entry points: train.py, eval.py, collect_force_data.py, train_force_sensor.py
+bash/                launch scripts: train.sh, train_hl*.sh, generate_*.sh (run from repo root)
+start_gentle_local.sh   machine-local env entry point — `source` it before running
 ```

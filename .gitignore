@@ -207,3 +207,9 @@ datasettrain.sh
 # datasets
 dataset/
 
+
+# Whole-body contact: collected datasets and trained sensors (large binaries)
+data/
+*.h5
+ee_tracking_log.csv
+start_gentle_local.sh
