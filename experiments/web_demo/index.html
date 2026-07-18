@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>G1 Contact Force Sensing — Web Demo</title>
+  <link rel="icon" href="data:," />
+  <style>
+    :root {
+      --panel-bg: rgba(18, 22, 28, 0.88);
+      --panel-fg: #dfe6ee;
+      --accent-red: #e14b4b;
+      --accent-green: #3ecf6e;
+      --bar-bg: #2a3038;
+    }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #10141a; font-family: system-ui, sans-serif; }
+    #app { position: fixed; inset: 0; }
+    #scene-canvas { display: block; width: 100%; height: 100%; }
+
+    #hud {
+      position: absolute; top: 12px; right: 12px; width: 240px;
+      background: var(--panel-bg); color: var(--panel-fg);
+      border-radius: 8px; padding: 12px 14px; font-size: 12px;
+      user-select: none; z-index: 10;
+    }
+    #hud h1 { font-size: 13px; margin: 0 0 8px; font-weight: 600; }
+    #hud .row { display: flex; justify-content: space-between; margin: 3px 0; }
+    #hud .readout { font-variant-numeric: tabular-nums; }
+    #hud .readout.applied { color: var(--accent-red); }
+    #hud .readout.predicted { color: var(--accent-green); }
+    .bar-wrap { background: var(--bar-bg); border-radius: 3px; height: 10px; overflow: hidden; margin: 2px 0 6px; }
+    .bar { height: 100%; width: 0%; background: var(--accent-green); transition: width 80ms linear; }
+    #det-bar { background: #e8b93e; }
+    #det-bar.contact-on { background: var(--accent-green); }
+    #det-wrap { position: relative; overflow: visible; }
+    #det-wrap .th-marker {
+      position: absolute; top: -1px; bottom: -1px; width: 2px;
+      background: rgba(255,255,255,0.55); pointer-events: none;
+    }
+    #det-wrap .th-marker.lo { background: rgba(255,255,255,0.3); }
+    #model-row { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; }
+    #model-row label { color: #9aa5b1; }
+    #model-select {
+      flex: 1; background: #323a45; color: var(--panel-fg);
+      border: 1px solid #444d59; border-radius: 5px; padding: 2px 4px; font-size: 12px;
+    }
+    #region-bars { max-height: 300px; overflow-y: auto; }
+    .region-row { display: grid; grid-template-columns: 64px 1fr 34px; gap: 6px; align-items: center; margin: 2px 0; }
+    .region-row .bar-wrap { margin: 0; height: 8px; }
+    .region-row .pct { text-align: right; font-variant-numeric: tabular-nums; color: #9aa5b1; }
+    /* 24-link mode: many compact rows with wider (truncated) link labels */
+    #region-bars.links .region-row { grid-template-columns: 92px 1fr 28px; gap: 5px; margin: 1px 0; font-size: 11px; }
+    #region-bars.links .region-row > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #region-bars.links .region-row .bar-wrap { height: 7px; }
+    #hud .buttons { display: flex; gap: 8px; margin-top: 10px; }
+    #hud button {
+      flex: 1; background: #323a45; color: var(--panel-fg); border: 1px solid #444d59;
+      border-radius: 5px; padding: 5px 0; font-size: 12px; cursor: pointer;
+    }
+    #hud button:hover { background: #3d4653; }
+    #hud .hint { margin-top: 8px; color: #8b96a3; font-size: 11px; line-height: 1.35; }
+    #status {
+      position: absolute; top: 12px; left: 12px; z-index: 10;
+      background: var(--panel-bg); color: var(--panel-fg);
+      border-radius: 8px; padding: 8px 12px; font-size: 12px; max-width: 420px;
+    }
+    #status.error { color: #ff9d9d; white-space: pre-wrap; }
+    #drag-label {
+      position: absolute; z-index: 11; pointer-events: none; display: none;
+      background: rgba(0,0,0,0.7); color: #ff8484; padding: 2px 7px;
+      border-radius: 4px; font-size: 12px; font-variant-numeric: tabular-nums;
+    }
+    #curve-wrap {
+      position: absolute; left: 12px; right: 268px; bottom: 12px; height: 130px;
+      background: var(--panel-bg); border-radius: 8px; z-index: 10; padding: 6px;
+    }
+    #curve-canvas { width: 100%; height: 100%; display: block; }
+
+    #walk-pad {
+      position: absolute; right: 12px; bottom: 12px; z-index: 12;
+      background: var(--panel-bg); color: var(--panel-fg);
+      border-radius: 8px; padding: 8px 10px 10px; user-select: none;
+    }
+    #walk-pad .wp-title { font-size: 11px; color: #9aa5b1; margin-bottom: 5px; text-align: center; }
+    #walk-pad .wp-grid {
+      display: grid; grid-template-columns: repeat(3, 32px); grid-template-rows: repeat(3, 28px);
+      gap: 4px; grid-template-areas: ". up ." "left . right" ". down .";
+    }
+    .wp-btn {
+      background: #323a45; color: var(--panel-fg); border: 1px solid #444d59;
+      border-radius: 5px; font-size: 15px; cursor: pointer; touch-action: none; padding: 0;
+    }
+    .wp-btn:active, .wp-btn.on { background: var(--accent-green); color: #10141a; border-color: var(--accent-green); }
+    .wp-btn[data-dir="w"] { grid-area: up; }
+    .wp-btn[data-dir="a"] { grid-area: left; }
+    .wp-btn[data-dir="s"] { grid-area: down; }
+    .wp-btn[data-dir="d"] { grid-area: right; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <canvas id="scene-canvas"></canvas>
+
+    <div id="status">loading…</div>
+    <div id="drag-label"></div>
+
+    <div id="hud">
+      <h1>Contact Force Sensing</h1>
+      <div id="model-row">
+        <label for="model-select">model</label>
+        <select id="model-select">
+          <option value="force_sensor_v4c_links" selected>v4c · 24 links · W=10</option>
+          <option value="force_sensor_v4c">v4c · 5 regions · W=6</option>
+          <option value="force_sensor_v4c_restboost">v4c restboost · 5 regions · W=6 (quietest rest)</option>
+        </select>
+      </div>
+      <div class="row"><span>detection p</span><span class="readout" id="det-val">0.00</span></div>
+      <div class="bar-wrap" id="det-wrap">
+        <div class="bar" id="det-bar"></div>
+        <div class="th-marker lo" style="left: 45%" title="th_lo 0.45"></div>
+        <div class="th-marker" style="left: 60%" title="th_hi 0.6"></div>
+      </div>
+      <div id="region-bars"></div>
+      <div class="row"><span>applied</span><span class="readout applied" id="applied-val">0.0 N</span></div>
+      <div class="row"><span>predicted</span><span class="readout predicted" id="predicted-val">0.0 N</span></div>
+      <div class="buttons">
+        <button id="btn-pause">Pause</button>
+        <button id="btn-reset">Reset</button>
+      </div>
+      <div class="hint">
+        <b>WASD / arrow keys</b> = walk (hold to move, release to stop).
+        Left-drag <b>on the robot</b> to push it, up to 40 N (red arrow =
+        applied force). Drag empty space to orbit. Scroll to zoom.
+        Green arrow / tint = the sensor's predicted contact, from
+        proprioception only (bright link + soft region for the 24-link model).
+        Detection is debounced with the model's calibrated hysteresis + 3-frame
+        persistence — the marks on the bar above show the active thresholds.
+      </div>
+    </div>
+
+    <div id="curve-wrap"><canvas id="curve-canvas"></canvas></div>
+
+    <div id="walk-pad">
+      <div class="wp-title">Walk (hold)</div>
+      <div class="wp-grid">
+        <button class="wp-btn" data-dir="w" title="forward (W / ↑)">↑</button>
+        <button class="wp-btn" data-dir="a" title="left (A / ←)">←</button>
+        <button class="wp-btn" data-dir="s" title="back (S / ↓)">↓</button>
+        <button class="wp-btn" data-dir="d" title="right (D / →)">→</button>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

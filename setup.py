@@ -4,7 +4,8 @@ setup(
     name="active_adaptation",
     author="btx0424@SUSTech, Qingzhou Lu",
     keywords=["robotics", "rl"],
-    packages=find_packages("."),
+    packages=find_packages("controllers/ceer"),
+    package_dir={"": "controllers/ceer"},
     install_requires=[
         "hydra-core",
         "omegaconf",

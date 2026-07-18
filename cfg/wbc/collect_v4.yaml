@@ -1,0 +1,82 @@
+# Whole-Body Contact — v4 data-collection overrides.
+#
+# Same mechanism as collect.yaml (merged onto the low-level G1_gentle run's cfg
+# by forcesense/collect/isaac.py), with three v4 changes over v3:
+#
+#  1. GRANULARITY: 30 force-application links (SixthSense-style, every major
+#     massive body link) instead of 12. Chosen from the Isaac G1 29-dof asset:
+#     all real links; the *_mimic bodies (head_mimic, {left,right}_hand_mimic)
+#     are near-massless visual/keypoint proxies and are skipped — hands are
+#     covered by the wrist links, the head by torso_link. NOTE: _match_indices
+#     drops any pattern absent from the motion dataset's body names; the
+#     collector prints + stores the actually-matched list in the h5, and the
+#     v4 trainer reads K dynamically. EFFECTIVE SET (verified in smoke, this
+#     dataset): 24 links — waist_{yaw,roll}_link and *_wrist_{pitch,yaw}_link
+#     are absent from the AMASS-retarget body list (trunk keeps pelvis +
+#     torso_link; hands keep *_wrist_roll_link).
+#  2. SUSTAINED HOLDS: hold widened [40,100] -> [40,400] steps (0.8-8 s) so the
+#     sensor sees demo-style continuous drags (v3 magnitude overshot ~50% on
+#     sustained pulls). Short holds are still sampled; long holds mostly
+#     survive at the lower force magnitudes (higher ones topple -> reset,
+#     which is fine and consistent with v3 fall handling).
+#  3. STATIC-STANDING MIX: handled by the collector's new --static_command
+#     flag (forcesense/collect/isaac.py), not by this file — run the
+#     collector twice (motion + static) and train on both h5 files.
+#
+# The wbc_input_/wbc_label_ observation groups are IDENTICAL to v3 (same
+# 320-dim input) — the deployed feature pipeline must not change.
+
+command:
+  external_force_mode: net_pull
+  net_pull_apply_pattern:          # 30 links: 4 trunk + 12 leg + 14 arm
+    # --- trunk (4) ---
+    - "pelvis"
+    - "waist_yaw_link"
+    - "waist_roll_link"
+    - "torso_link"
+    # --- legs (2 x 6) ---
+    - "left_hip_pitch_link"
+    - "right_hip_pitch_link"
+    - "left_hip_roll_link"
+    - "right_hip_roll_link"
+    - "left_hip_yaw_link"
+    - "right_hip_yaw_link"
+    - "left_knee_link"
+    - "right_knee_link"
+    - "left_ankle_pitch_link"
+    - "right_ankle_pitch_link"
+    - "left_ankle_roll_link"
+    - "right_ankle_roll_link"
+    # --- arms (2 x 7) ---
+    - "left_shoulder_pitch_link"
+    - "right_shoulder_pitch_link"
+    - "left_shoulder_roll_link"
+    - "right_shoulder_roll_link"
+    - "left_shoulder_yaw_link"
+    - "right_shoulder_yaw_link"
+    - "left_elbow_link"
+    - "right_elbow_link"
+    - "left_wrist_roll_link"
+    - "right_wrist_roll_link"
+    - "left_wrist_pitch_link"
+    - "right_wrist_pitch_link"
+    - "left_wrist_yaw_link"
+    - "right_wrist_yaw_link"
+  net_pull_force_range: [10.0, 40.0]   # N; <5N sits in the proprioceptive dead-zone
+  net_pull_xy_only: false              # full 3D push directions
+  net_pull_ramp_up_range: [10, 30]
+  net_pull_hold_range: [40, 400]       # v4: up to 8 s sustained holds (v3: [40,100])
+  net_pull_ramp_down_range: [10, 30]
+  net_pull_rest_range: [20, 60]        # rest phase -> "no contact" negative samples
+
+# --- observation groups appended for data collection (IDENTICAL to v3) ---
+observation:
+  wbc_input_:                                            # MLP/GRU input: proprioception only
+    applied_torque: {}                                   # PD effort -> strongest external-force cue
+    joint_pos_history: {history_steps: [0, 1, 2, 3, 4]}  # joint pos + implicit velocity
+    applied_action: {}                                   # commanded joint target q_des (-> tracking error)
+    root_ang_vel_history: {history_steps: [0, 1, 2, 3, 4]}       # IMU gyro
+    projected_gravity_history: {history_steps: [0, 1, 2, 3, 4]}  # IMU tilt
+    prev_actions: {steps: 3}                             # known self-input, to subtract
+  wbc_label_:                                            # supervision target (sim ground truth)
+    net_pull_force_priv: {}   # [point_b(3) | force_b/Fmax(3) | force_w/Fmax(3) | body_onehot(K) | phase(4) | timer(1) | mag(1)]

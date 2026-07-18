@@ -83,6 +83,9 @@ def main():
     parser.add_argument("-s", "--success", action="store_true", default=False)  # test success rate
     parser.add_argument("--baseline_root_command", action="store_true", default=False)
     args = parser.parse_args()
+    # Isaac Kit re-parses sys.argv on AppLauncher start and chokes on our flags
+    # (e.g. "-p -e" -> "Failed to parse command line arguments"); strip them.
+    sys.argv = sys.argv[:1]
 
     api = wandb.Api()
     

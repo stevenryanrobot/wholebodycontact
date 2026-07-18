@@ -1,0 +1,26 @@
+{
+  "name": "web_demo",
+  "version": "1.0.0",
+  "description": "Browser demo: MuJoCo WASM + ONNX Runtime Web + three.js G1 contact-force sensing",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "smoke": "node test/node_smoke.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@mujoco/mujoco": "^3.10.0",
+    "onnxruntime-web": "^1.27.0",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.61.1",
+    "vite": "^5.4.21"
+  },
+  "type": "module"
+}

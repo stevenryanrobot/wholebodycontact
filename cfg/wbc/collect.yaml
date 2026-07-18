@@ -1,6 +1,6 @@
 # Whole-Body Contact (Plan A) — data-collection overrides.
 #
-# Merged onto a *low-level* G1_gentle run's cfg by scripts/collect_force_data.py.
+# Merged onto a *low-level* G1_gentle run's cfg by forcesense/collect/isaac.py.
 # The low-level locomotion/tracking policy just keeps the robot upright while we
 # push random whole-body links; it does NOT consume net_pull_force_priv, so
 # expanding the force-body set here causes no policy input-dim conflict.

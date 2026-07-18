@@ -2,7 +2,7 @@
 set -euo pipefail
 
 DATASET_ROOT=/home/dexlab/retargetted/AMASS
-OUT_DIR=dataset/limmt_no_foot_gentle_amass_full
+OUT_DIR=data/dataset/limmt_no_foot_gentle_amass_full
 ALLOWLIST=scripts/data_process/allowlist_limmt_no_foot_gentle_amass.json
 PYTHON=${PYTHON:-/home/dexlab/miniconda3/envs/gentle/bin/python}
 

@@ -4,8 +4,17 @@
 [![arXiv](https://img.shields.io/badge/Arxiv-2511.04679-b31b1b.svg?logo=arXiv)](https://arxiv.org/abs/2511.04679) 
 [![Video](https://img.shields.io/badge/Video-Demo-FF0000.svg?logo=youtube)](https://www.youtube.com/watch?v=rF6N2o0IQJg)
 [![Online Demo](https://img.shields.io/badge/Online-Demo-3B82F6.svg?logo=demo)](https://gentle-humanoid.axell.top/#/demo)
+[![Whole-Body Contact Demo](https://img.shields.io/badge/Web-Contact_Sensing_Demo-3ecf6e.svg)](https://stevenryanrobot.github.io/wholebodycontact/)
 
 This repository contains the official implementation of GentleHumanoid. For additional details, please refer to the [Project](https://gentle-humanoid.axell.top) page.
+
+> **🕹️ Whole-body contact-sensing web demo (this fork):
+> <https://stevenryanrobot.github.io/wholebodycontact/>** — the Unitree G1
+> infers *where* it is being touched and *how hard*, from proprioception alone.
+> Left-drag on the robot to push it; a green arrow / heatmap shows the sensor's
+> prediction. Fully client-side (MuJoCo WASM + ONNX Runtime Web + three.js).
+> Source and build in [`experiments/web_demo/`](experiments/web_demo/); auto-deployed to GitHub Pages by
+> [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
 
 Main features:
 
@@ -134,7 +143,7 @@ Workflow (run inside the `gentle` env; `source start_gentle_local.sh` first):
 ```bash
 # 1. Collect data: drive a frozen (preferably stiff) low-level policy under
 #    random whole-body forces and log (proprioception, force-label) to HDF5.
-python scripts/collect_force_data.py -r ${low_level_wandb_run_path} \
+python forcesense/collect/isaac.py -r ${low_level_wandb_run_path} \
     -n 30000 --num_envs 64 -o data/wbc/wbc_train.h5
 
 # 2. Train the force-sensing MLP (no Isaac needed).

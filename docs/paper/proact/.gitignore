@@ -1,0 +1,18 @@
+# LaTeX build artifacts — everything the compiler regenerates
+build/
+
+# stray aux files (in case something is built without .latexmkrc)
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.toc
+*.lof
+*.lot
+
+# the compiled PDF is a build artifact; uncomment to keep it out of git too
+# proact_humanoids2026.pdf

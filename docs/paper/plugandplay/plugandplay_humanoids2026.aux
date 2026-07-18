@@ -1,0 +1,66 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{sixthsense}
+\citation{gentlehumanoid}
+\citation{sixthsense}
+\citation{deluca2006momentum}
+\citation{mobnet}
+\citation{factr2}
+\@writefile{toc}{\contentsline {section}{\numberline {I}Introduction}{1}{section.1}\protected@file@percent }
+\citation{gentlehumanoid}
+\citation{hogan1985impedance}
+\citation{tobin2017domainrand}
+\citation{todorov2012mujoco}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces \textbf  {Plug-and-play contact estimation.} A humanoid runs many controllers, but a proprioceptive contact estimator is trained under one. The raw proprioception an end-to-end estimator relies on is \textcolor {red!70}{controller-dependent} (its actuator-torque distribution shifts with the control law), so the estimator does not transfer. We add a \textcolor {blue!70}{controller-invariant} residual channel recovered from the equation of motion --- it depends only on measured motion and the model, not on how the torque was produced --- which lets one estimator plug into unseen controllers and, by subtracting the ground reaction, also un-masks the legs.}}{2}{figure.1}\protected@file@percent }
+\newlabel{fig:overview}{{1}{2}{\textbf {Plug-and-play contact estimation.} A humanoid runs many controllers, but a proprioceptive contact estimator is trained under one. The raw proprioception an end-to-end estimator relies on is \textcolor {red!70}{controller-dependent} (its actuator-torque distribution shifts with the control law), so the estimator does not transfer. We add a \textcolor {blue!70}{controller-invariant} residual channel recovered from the equation of motion --- it depends only on measured motion and the model, not on how the torque was produced --- which lets one estimator plug into unseen controllers and, by subtracting the ground reaction, also un-masks the legs}{figure.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {II}Related Work}{2}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {III}The Cross-Controller Generalization Gap}{2}{section.3}\protected@file@percent }
+\newlabel{sec:gap}{{III}{2}{The Cross-Controller Generalization Gap}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}Setup}{2}{subsection.3.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces The seven controller variants (PD-gain scale vs.\ nominal).}}{2}{table.1}\protected@file@percent }
+\newlabel{tab:ctrl}{{I}{2}{The seven controller variants (PD-gain scale vs.\ nominal)}{table.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}Result: the gap is large}{2}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {IV}A Controller-Invariant Residual Channel}{2}{section.4}\protected@file@percent }
+\newlabel{sec:method}{{IV}{2}{A Controller-Invariant Residual Channel}{section.4}{}}
+\citation{deluca2006momentum,mobnet}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Cross-controller transfer (leave-one-out over 7 controllers). Raw proprioception collapses on unseen/extreme controllers; the controller-invariant residual channel stays flat.}}{3}{figure.2}\protected@file@percent }
+\newlabel{fig:gap}{{2}{3}{Cross-controller transfer (leave-one-out over 7 controllers). Raw proprioception collapses on unseen/extreme controllers; the controller-invariant residual channel stays flat}{figure.2}{}}
+\newlabel{eq:resid}{{2}{3}{A Controller-Invariant Residual Channel}{equation.4.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {V}Experiments}{3}{section.5}\protected@file@percent }
+\newlabel{sec:exp}{{V}{3}{Experiments}{section.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-A}}The residual channel closes the gap robustly}{3}{subsection.5.1}\protected@file@percent }
+\newlabel{sec:robust}{{\mbox  {V-A}}{3}{The residual channel closes the gap robustly}{subsection.5.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-B}}The residual also solves the legs}{3}{subsection.5.2}\protected@file@percent }
+\newlabel{sec:legs}{{\mbox  {V-B}}{3}{The residual also solves the legs}{subsection.5.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces Cross-controller robustness (leave-one-out over 7 controllers, train on 6 / eval on the unseen one). Worst-case and mean over the 7 held-out controllers.}}{3}{table.2}\protected@file@percent }
+\newlabel{tab:main}{{II}{3}{Cross-controller robustness (leave-one-out over 7 controllers, train on 6 / eval on the unseen one). Worst-case and mean over the 7 held-out controllers}{table.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Worst-case vs.\ mean cross-controller region accuracy over 7 held-out controllers. The residual channel raises the worst case from $0.42$ to $0.91$.}}{3}{figure.3}\protected@file@percent }
+\newlabel{fig:robust}{{3}{3}{Worst-case vs.\ mean cross-controller region accuracy over 7 held-out controllers. The residual channel raises the worst case from $0.42$ to $0.91$}{figure.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-C}}Making the residual hardware-realizable}{3}{subsection.5.3}\protected@file@percent }
+\newlabel{sec:realize}{{\mbox  {V-C}}{3}{Making the residual hardware-realizable}{subsection.5.3}{}}
+\citation{deluca2006momentum,mobnet}
+\bibstyle{IEEEtran}
+\bibdata{references}
+\bibcite{sixthsense}{1}
+\bibcite{gentlehumanoid}{2}
+\bibcite{deluca2006momentum}{3}
+\bibcite{mobnet}{4}
+\bibcite{factr2}{5}
+\@writefile{lot}{\contentsline {table}{\numberline {III}{\ignorespaces Per-region recall (cross-controller, 7-fold leave-one-out average).}}{4}{table.3}\protected@file@percent }
+\newlabel{tab:region}{{III}{4}{Per-region recall (cross-controller, 7-fold leave-one-out average)}{table.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Per-region recall. The residual channel rescues the legs (and trunk) by removing stance masking, closing the gap to the arms.}}{4}{figure.4}\protected@file@percent }
+\newlabel{fig:region}{{4}{4}{Per-region recall. The residual channel rescues the legs (and trunk) by removing stance masking, closing the gap to the arms}{figure.4}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {VI}Discussion and Limitations}{4}{section.6}\protected@file@percent }
+\newlabel{sec:limits}{{VI}{4}{Discussion and Limitations}{section.6}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {VII}Conclusion}{4}{section.7}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {IV}{\ignorespaces Realizability of the residual. ``full'' subtracts the (privileged) ground reaction; ``realizable'' drops it (proprioception-only).}}{4}{table.4}\protected@file@percent }
+\newlabel{tab:realize}{{IV}{4}{Realizability of the residual. ``full'' subtracts the (privileged) ground reaction; ``realizable'' drops it (proprioception-only)}{table.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Legs are robust to ground-reaction estimation error: recall degrades gracefully with $\alpha $ while the arms are unaffected. A realistic foot-sensor error ($<10\%$) keeps legs near $0.86$--$0.89$.}}{4}{figure.5}\protected@file@percent }
+\newlabel{fig:grfnoise}{{5}{4}{Legs are robust to ground-reaction estimation error: recall degrades gracefully with $\alpha $ while the arms are unaffected. A realistic foot-sensor error ($<10\%$) keeps legs near $0.86$--$0.89$}{figure.5}{}}
+\@writefile{toc}{\contentsline {section}{References}{4}{section*.1}\protected@file@percent }
+\bibcite{hogan1985impedance}{6}
+\bibcite{tobin2017domainrand}{7}
+\bibcite{todorov2012mujoco}{8}
+\gdef \@abspage@last{5}

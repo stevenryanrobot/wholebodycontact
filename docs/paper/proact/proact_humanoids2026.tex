@@ -1,0 +1,192 @@
+%==============================================================================
+% ProACT --- Proprioceptive Active Contact Sensing
+% Target: IEEE-RAS Int. Conf. on Humanoid Robots (Humanoids) 2026
+%   Format : IEEE conference (IEEEtran, two-column, US Letter, 10pt)
+%   Limit  : 8 pages INCLUDING references
+%   Deadline (paper): 2026-07-24 EOD Pacific ; optional video +3 days
+% Build   : pdflatex -> bibtex -> pdflatex -> pdflatex
+%           (needs IEEEtran.cls + IEEEtran.bst, both ship with TeX Live)
+%==============================================================================
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+% --- packages ---------------------------------------------------------------
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{booktabs}      % nice tables (\toprule \midrule \bottomrule)
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+
+% small helper for TODO notes (remove before submission)
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{ProACT: Proprioceptive Active Contact Sensing for\\
+       Whole-Body Contact Localization on Humanoids}
+
+% ---- authors (placeholder) -------------------------------------------------
+\author{
+\IEEEauthorblockN{Anonymous Author(s)}
+\IEEEauthorblockA{\textit{Affiliation} \\
+\textit{Institution}\\
+City, Country \\
+email@domain}
+% \and  ... more authors ...
+}
+
+\maketitle
+
+%==============================================================================
+\begin{abstract}
+Proprioception-only estimation of external contact on humanoids has recently
+reached whole-body wrench prediction, but its localization accuracy is
+fundamentally limited: for contacts on the legs and torso during quiet stance
+the external force lies largely in the null space of the contact Jacobian and
+is therefore \emph{unobservable} from a fixed posture. We observe that contact
+observability is a function of the robot's motion, and introduce \textbf{ProACT},
+a proprioceptive \emph{active} contact-sensing framework: upon detecting a
+\emph{sustained} contact whose location is ambiguous, the robot executes a small,
+deliberate probing motion chosen to make the previously-unobservable force
+component observable, and refines its estimate from the resulting proprioceptive
+sequence. ProACT couples an always-on passive base estimator with an on-demand
+active refinement stage, and is trained in simulation with ground-truth contact
+labels.
+% --- headline results (fill in) ---
+\todo{one-sentence headline result: e.g. active probing raises leg/trunk
+localization from X\% (passive) to Y\%, matching/exceeding the passive ceiling.}
+\end{abstract}
+
+\begin{IEEEkeywords}
+humanoid robots, contact estimation, proprioception, active perception,
+force sensing, whole-body control
+\end{IEEEkeywords}
+
+%==============================================================================
+\section{Introduction}
+% - the problem: sense whole-body external contact WITHOUT F/T or tactile sensors
+% - why it matters: safe interaction, blind navigation, collision response
+% - the gap: passive proprioceptive sensing is capped by motion-dependent
+%   observability (legs/trunk); even large models plateau (cite SixthSense).
+% - key idea: observability = f(motion); MOVE to make the unobservable observable.
+% - requires SUSTAINED contact (transient contact is gone before you can probe).
+% - contributions (bullet):
+%     (1) an observability analysis of proprioceptive contact localization;
+%     (2) ProACT: passive base + on-demand active probing (scripted -> learned);
+%     (3) evidence that active probing breaks the passive ceiling on legs/trunk;
+%     (4) a sim-to-real calibration path for deployment.
+\todo{write introduction}
+
+%==============================================================================
+\section{Related Work}
+\subsection{Proprioceptive external-force / contact estimation}
+Model-based momentum observers recover external joint torques from dynamics
+residuals~\cite{deluca2006momentum}. Learning-based methods now predict a
+whole-body wrench field from proprioception alone~\cite{sixthsense}, and
+self-supervised free-space torque models enable label-free calibration on real
+robots~\cite{next}.
+\todo{expand; position ProACT as the active complement to these passive methods}
+
+\subsection{Active and tactile perception}
+% active tactile exploration / information-gain probing (fingertip scale);
+% dual control / active uncertainty reduction. Gap: none on whole-body
+% humanoid proprioceptive contact.
+\todo{}
+
+\subsection{Whole-body compliance and interaction}
+Impedance control~\cite{hogan1985impedance} underlies compliant physical
+interaction; GentleHumanoid~\cite{gentlehumanoid} learns whole-body upper-body
+compliance from proprioception without force/tactile sensors, but regulates a
+manually-set stiffness rather than actively sensing where contact occurs.
+\todo{expand}
+
+%==============================================================================
+\section{Problem Formulation and Observability}
+% External force f at a body point produces joint torques tau_ext = J^T(q) f.
+% Components of f in null(J^T(q)) produce zero torque -> unobservable in pose q.
+% Stance masking (double support) + proximal ambiguity make legs/trunk hard.
+% Key: null(J^T(q)) depends on q -> changing pose changes what is observable.
+\begin{equation}
+  \boldsymbol{\tau}_{\text{ext}} = \mathbf{J}^{\top}(\mathbf{q})\,\mathbf{f},
+  \qquad
+  \mathbf{f}\in\mathrm{null}\!\left(\mathbf{J}^{\top}(\mathbf{q})\right)
+  \;\Rightarrow\; \boldsymbol{\tau}_{\text{ext}}=\mathbf{0}.
+  \label{eq:jt}
+\end{equation}
+\todo{state the observability claim + why motion helps; optional Gramian.}
+
+%==============================================================================
+\section{Method}
+\subsection{Passive base estimator}
+% recurrent decoder over a proprioceptive window; outputs contact prob + per-link
+% wrench FIELD (dense) rather than one-hot region. Detection-gated magnitude/dir.
+\todo{}
+
+\subsection{Active probing}
+% trigger: sustained contact detected AND estimate ambiguous.
+% probe = small command injected into a frozen low-level (impedance) policy:
+% weight shift / torso sway / brief limb unload. Three tiers:
+%   (a) scripted open-loop probe (existence proof)
+%   (b) learned closed-loop probe policy (RL; reward = localization gain /
+%       posterior-entropy reduction - balance/effort penalty)
+%   (c) observability-Gramian / information-gain optimal probe (optional)
+\todo{}
+
+\subsection{Online refinement decoder}
+% recurrent / recursive posterior over contact updated as the probe unfolds.
+% prev_actions channel lets the model subtract self-motion from external signal.
+\todo{}
+
+\subsection{Sim-to-real calibration}
+% NEXT-style free-space torque model on contact-free real data; bridges the
+% probe policy trained in sim to the real robot.
+\todo{}
+
+%==============================================================================
+\section{Experiments}
+% Setup: humanoid in simulation, frozen stiff impedance low-level policy,
+% net_pull applies SUSTAINED external force -> ground-truth (link + 3D force).
+% Conditions: (P) passive static; (S) scripted probe; (A) learned probe.
+% Controls: EQUAL total observation frames; same decoder capacity; same contact
+% distribution. Metrics (comparable to prior work): exact-link acc, +/-1-link
+% tolerant acc, detection rate, false-alarm rate; report legs/trunk separately.
+% Mechanistic check: correlate localization gain with null-space excitation.
+\todo{}
+
+\begin{table}[t]
+\centering
+\caption{Contact localization: passive vs.\ active probing.}
+\label{tab:main}
+\begin{tabular}{lcccc}
+\toprule
+Method & \multicolumn{2}{c}{Exact-link (\%)} & \multicolumn{2}{c}{$\pm$1-link (\%)} \\
+       & Legs/Trunk & Arms & Legs/Trunk & Arms \\
+\midrule
+Passive (static)      & \todo{} & \todo{} & \todo{} & \todo{} \\
+ProACT (scripted)     & \todo{} & \todo{} & \todo{} & \todo{} \\
+ProACT (learned)      & \todo{} & \todo{} & \todo{} & \todo{} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%==============================================================================
+\section{Results and Discussion}
+\todo{}
+
+%==============================================================================
+\section{Conclusion}
+\todo{}
+
+%==============================================================================
+% \section*{Acknowledgment}
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

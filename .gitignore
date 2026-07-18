@@ -205,7 +205,6 @@ motion.npy
 datasettrain.sh
 
 # datasets
-dataset/
 
 
 # Whole-body contact: collected datasets and trained sensors (large binaries)
@@ -213,3 +212,23 @@ data/
 *.h5
 ee_tracking_log.csv
 start_gentle_local.sh
+
+# low-level policy + force-sensor checkpoints (large binaries, co-located with source)
+controllers/*/checkpoints/
+forcesense/checkpoints/
+
+# maze app training artifacts (logs / checkpoints / collected data — large)
+experiments/maze/logs/
+experiments/maze/data/
+experiments/maze/results/
+
+# web demo build output / deps
+experiments/web_demo/node_modules/
+experiments/web_demo/dist/
+
+# local Claude Code tooling config (do not publish)
+.claude/
+
+
+# web demo model exports (regenerable, large)
+experiments/web_demo/public/models/*.onnx
