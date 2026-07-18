@@ -9,6 +9,6 @@ mkdir -p "$OUT_DIR"
 
 export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
 
-"$PYTHON" scripts/data_process/generate_dataset.py \
+"$PYTHON" controllers/ceer/scripts/data_process/generate_dataset.py \
   --dataset-root "$DATASET_ROOT" \
   --mem-path "$OUT_DIR"

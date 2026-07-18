@@ -24,7 +24,7 @@ run_stage() {
   local run_id="$2"
   local checkpoint_path="${3:-}"
 
-  local cmd=(torchrun --nproc_per_node="$NPROC" --master_port="$MASTER_PORT" scripts/train.py
+  local cmd=(torchrun --nproc_per_node="$NPROC" --master_port="$MASTER_PORT" controllers/ceer/scripts/train.py
     task="$TASK"
     algo="$algo"
     task.action.low_policy.run_path="$LOW_RUN_PATH"

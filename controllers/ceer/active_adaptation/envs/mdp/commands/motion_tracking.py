@@ -1431,7 +1431,7 @@ class MotionTrackingCommand_impedance(MotionTrackingCommand):
 
         # force origin samples
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.join(current_dir, "../../../../../..")
+        project_root = os.path.join(current_dir, "../../../..")
         hand_samples_path = os.path.join(project_root, "scripts/data_process/hand_grid_samples.pt")
         self.force_origin_samples_raw = torch.load(hand_samples_path, map_location=self.device)
         self.force_origin_samples_left = self.force_origin_samples_raw["left"].to(self.device)

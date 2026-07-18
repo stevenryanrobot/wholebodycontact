@@ -478,7 +478,7 @@ class Sim2Sim:
         return self.d.qfrc_constraint[self.vadr].astype(np.float32)
 
     def wbc_obs(self):
-        """320-dim 'wbc_input_' group (cfg/wbc/collect.yaml order):
+        """320-dim 'wbc_input_' group (forcesense/cfg/collect.yaml order):
         applied_torque(29) | joint_pos_history[0..4](145) | applied_action(29) |
         root_ang_vel[0..4](15) | projected_gravity[0..4](15) | prev_actions*3(87).
         applied_action = asset.data.joint_pos_target = the ABSOLUTE q_des

@@ -6,7 +6,7 @@ PROJECT="luoxinyuan-duke-university/gentle_humanoid"
 export CUDA_VISIBLE_DEVICES=4,5
 MASTER_PORT=29507
 NPROC=2
-SCRIPT="scripts/train.py"
+SCRIPT="controllers/ceer/scripts/train.py"
 
 run_pipeline() {
   local TASK="$1" TAG="$2" SUFFIX="$3"

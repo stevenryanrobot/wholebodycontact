@@ -35,7 +35,7 @@ from omegaconf import OmegaConf
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 FILE_PATH = os.path.dirname(__file__)
-DEFAULT_OVERRIDES = os.path.join(FILE_PATH, "..", "..", "cfg", "wbc", "collect.yaml")
+DEFAULT_OVERRIDES = os.path.join(FILE_PATH, "..", "cfg", "collect.yaml")
 
 from forcesense.collect.isaac import load_run_cfg, unwrap_base_env, extract_force_body_names
 from forcesense.common.regions import region_of
@@ -109,6 +109,7 @@ def main():
     simulation_app = app_launcher.app
 
     from torchrl.envs.utils import set_exploration_type, ExplorationType
+    sys.path.insert(0, os.path.join(FILE_PATH, "..", "..", "controllers", "ceer"))  # framework scripts.utils lives here now
     from scripts.utils.helpers import make_env_policy
     from active_adaptation.utils.math import quat_apply, quat_apply_inverse
 

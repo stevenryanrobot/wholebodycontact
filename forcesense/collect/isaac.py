@@ -36,7 +36,7 @@ from omegaconf import OmegaConf
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 FILE_PATH = os.path.dirname(__file__)
-DEFAULT_OVERRIDES = os.path.join(FILE_PATH, "..", "..", "cfg", "wbc", "collect.yaml")
+DEFAULT_OVERRIDES = os.path.join(FILE_PATH, "..", "cfg", "collect.yaml")
 
 # net_pull_force_priv layout (see motion_tracking.py:net_pull_force_priv).
 # [ point_b(3) | force_b/Fmax(3) | force_w/Fmax(3) | body_onehot(K) | phase(4) | timer(1) | mag(1) ]
@@ -192,6 +192,7 @@ def main():
     simulation_app = app_launcher.app
 
     from torchrl.envs.utils import set_exploration_type, ExplorationType
+    sys.path.insert(0, os.path.join(FILE_PATH, "..", "..", "controllers", "ceer"))  # framework scripts.utils lives here now
     from scripts.utils.helpers import make_env_policy
 
     OmegaConf.resolve(cfg)

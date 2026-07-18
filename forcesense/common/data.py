@@ -6,7 +6,7 @@ Split out of the v3/v4 trainer. Contents:
   - make_targets: build class ids / names from a loaded grid
   - gather_frames / gather_window / build_index: windowed-batch indexing
 
-Frame layout of the 320-dim wbc_input_ vector (cfg/wbc/collect*.yaml order):
+Frame layout of the 320-dim wbc_input_ vector (forcesense/cfg/collect*.yaml order):
   [0:29]    applied_torque                (Isaac joint order)
   [29:174]  joint_pos_history steps 0..4  (step0 = newest; q - q_default)
   [174:203] applied_action                (ABSOLUTE joint target q_des)

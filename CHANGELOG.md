@@ -23,7 +23,7 @@ New top-level layout:
   `figs.py`, `assets/` (was `assets_sim2sim/`).
 - `experiments/` — research + apps: `crosspolicy/` (plug-and-play), `proact/`
   (active sensing), `maze/` (was `mjlab_maze/`), `web_demo/`.
-- `legacy/` — superseded v1 (train_force_sensor, wbc_train/sweep v1, v1 viewers).
+- `archive/` — superseded v1 (train_force_sensor, wbc_train/sweep v1, v1 viewers).
 - `scripts/` — slimmed to base-framework entry points (train/eval + utils/,
   data_process/).
 
@@ -39,6 +39,16 @@ Key module moves (old → new), for anything still referencing old names:
   `scripts/wbc_plugandplay_figs.py` → `experiments/crosspolicy/figs.py`
 - `scripts/wbc_probe_experiment.py` → `experiments/proact/probe_experiment.py`
 - `bash/` launch scripts updated to the new paths.
+
+### Changed — reorganization phase 2: co-locate configs + scripts per module
+Each area is now self-contained. The CEER framework's `cfg/`, `scripts/`
+(train/eval/utils/data_process), and `bash/` moved from the repo root under
+`controllers/ceer/`; force-sensing configs (`cfg/wbc`) -> `forcesense/cfg/` and
+pipelines (`bash/wbc_*`) -> `forcesense/bash/`. Top-level `scripts/` keeps only
+the machine-local `start_gentle_local.sh`. Hydra `config_path` and the scripts'
+`sys.path` are relative, so moving cfg+scripts together kept them working; fixed
+the few cross-references (motion_tracking hand-samples path, forcesense's
+`scripts.utils` import, `DEFAULT_OVERRIDES`). `legacy/` -> `archive/` (gitignored).
 
 ### Added — cross-policy (plug-and-play) generalization test
 Phase-0 existence check for a controller-agnostic force estimator: does a

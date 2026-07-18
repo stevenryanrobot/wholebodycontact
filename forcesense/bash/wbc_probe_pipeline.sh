@@ -10,13 +10,13 @@ STEPS=8000
 
 echo "===== [1/3] collect STATIC (passive baseline) ====="
 python -u forcesense/collect/isaac.py -r "$RUN" \
-    --overrides cfg/wbc/collect_v4.yaml --static_command \
+    --overrides forcesense/cfg/collect_v4.yaml --static_command \
     --num_envs $ENVS --num_steps $STEPS --warmup 200 \
     -o data/wbc/probe/probe_static.h5
 
 echo "===== [2/3] collect WIGGLE (active probe: squat) ====="
 python -u forcesense/collect/isaac.py -r "$RUN" \
-    --overrides cfg/wbc/collect_v4.yaml --static_command --probe \
+    --overrides forcesense/cfg/collect_v4.yaml --static_command --probe \
     --num_envs $ENVS --num_steps $STEPS --warmup 200 \
     -o data/wbc/probe/probe_wiggle.h5
 

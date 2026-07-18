@@ -7,7 +7,7 @@ standing proprioception. Cure: same-schema data from the deployment domain.
 What: N parallel worker processes, each a headless forcesense.sim2sim.Sim2Sim
 (the verified MuJoCo replica of the Isaac obs/action pipeline) standing under
 the exported ONNX policy while a scripted net_pull-style scheduler replicates
-the cfg/wbc/collect_v4.yaml force profile:
+the forcesense/cfg/collect_v4.yaml force profile:
   rest 20-60 (30% of cycles: 200-500 for extra pure-rest negatives)
   -> ramp_up 10-30 -> hold 40-400 -> ramp_down 10-30, |F| ~ U[10,40] N,
   isotropic 3D direction, one random link of the SAME 24-link set as the

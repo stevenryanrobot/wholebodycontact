@@ -15,7 +15,7 @@ cd "$REPO"
 source scripts/start_gentle_local.sh
 
 RUN_PATH="luoxinyuan-duke-university/gentle_humanoid/gentle_finetune_3point_amass_limmt_full_stiff30"
-OVERRIDES="cfg/wbc/collect_v4.yaml"
+OVERRIDES="forcesense/cfg/collect_v4.yaml"
 NUM_ENVS=128
 MOTION_STEPS=35000        # -> 35001*128 = 4.48M samples (~5.7 GB)
 STATIC_STEPS=15000        # -> 15001*128 = 1.92M samples (~2.5 GB, ~30% of total)
