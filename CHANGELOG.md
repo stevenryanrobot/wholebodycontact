@@ -5,50 +5,48 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased] — branch `wholebodycontact`
 
-### Changed — repository reorganization (professional restructure)
-The flat `scripts/` pile (~30 `wbc_*` + collect/train/viz files mixed together)
-was split into clear modules. **No behavior changed** — pure relocation + import
-rewrites, validated by importing all 25 moved modules under the `gentle` env.
-New top-level layout:
-- `controllers/` — low-level policies (swappable base controllers).
-  - `controllers/ceer/active_adaptation/` — GentleHumanoid framework / CEER policy
-    source (was top-level `active_adaptation/`; still importable as
-    `active_adaptation` via `setup.py` `package_dir`; needs `pip install -e .`).
-  - `controllers/ceer/checkpoints/` — exported CEER ONNX (was `scripts/exports/`).
-  - `controllers/README.md` — how to add a new policy (e.g. Sonic) as a plugin.
-- `forcesense/` — the force-sensing module (our contribution): `models.py`,
-  `common/{regions,data,metrics}.py` (shared lib), `train/{core,sweep_v3,sweep_v4,
-  sweep_v4_r2,finetune,champion}.py`, `collect/{isaac,mujoco}.py`,
-  `eval/eval_deploy.py`, `sim2sim.py`, `export.py`, `viz/{play,viz}.py`,
-  `figs.py`, `assets/` (was `assets_sim2sim/`).
-- `experiments/` — research + apps: `crosspolicy/` (plug-and-play), `proact/`
-  (active sensing), `maze/` (was `mjlab_maze/`), `web_demo/`.
-- `archive/` — superseded v1 (train_force_sensor, wbc_train/sweep v1, v1 viewers).
-- `scripts/` — slimmed to base-framework entry points (train/eval + utils/,
-  data_process/).
+### 2026-07-18 — repository reorganization, data tidy, docs
 
-Key module moves (old → new), for anything still referencing old names:
-- `scripts/wbc_train_v3.py` → `forcesense/{models.py, common/data.py, train/core.py}`
-- `scripts/wbc_sim2sim.py` → `forcesense/sim2sim.py`;
-  `scripts/collect_force_data.py` → `forcesense/collect/isaac.py`;
-  `scripts/wbc_collect_mujoco.py` → `forcesense/collect/mujoco.py`
-- `scripts/wbc_deploy_metrics.py` → `forcesense/common/metrics.py`;
-  `scripts/wbc_eval_deploy.py` → `forcesense/eval/eval_deploy.py`;
-  `scripts/wbc_export_v4.py` → `forcesense/export.py`
-- `scripts/wbc_crosspolicy*.py` → `experiments/crosspolicy/{base,sweep,dropout,perregion,grfnoise}.py`;
-  `scripts/wbc_plugandplay_figs.py` → `experiments/crosspolicy/figs.py`
-- `scripts/wbc_probe_experiment.py` → `experiments/proact/probe_experiment.py`
-- `bash/` launch scripts updated to the new paths.
+Newest first; times are rough. The reorg changed **no behavior** — pure
+relocation + import/path rewrites, validated by importing all 25 moved modules
+and re-composing Hydra under the `gentle` env.
 
-### Changed — reorganization phase 2: co-locate configs + scripts per module
-Each area is now self-contained. The CEER framework's `cfg/`, `scripts/`
-(train/eval/utils/data_process), and `bash/` moved from the repo root under
-`controllers/ceer/`; force-sensing configs (`cfg/wbc`) -> `forcesense/cfg/` and
-pipelines (`bash/wbc_*`) -> `forcesense/bash/`. Top-level `scripts/` keeps only
-the machine-local `start_gentle_local.sh`. Hydra `config_path` and the scripts'
-`sys.path` are relative, so moving cfg+scripts together kept them working; fixed
-the few cross-references (motion_tracking hand-samples path, forcesense's
-`scripts.utils` import, `DEFAULT_OVERRIDES`). `legacy/` -> `archive/` (gitignored).
+- **15:21** Split the flat `scripts/` pile into clear top-level modules:
+  `controllers/` (low-level policies), `forcesense/` (the force-sensing module),
+  `experiments/` (research + apps). Nested the GentleHumanoid framework at
+  `controllers/ceer/active_adaptation/` (importable name kept via `setup.py`
+  `package_dir`; run `pip install -e .`). Renamed the repo folder to
+  `wholebodycontact`. _(b4a2bb4)_
+- **15:26** Moved `start_gentle_local.sh` into `scripts/`; fixed references. _(4ffcd6d)_
+- **15:30-16:00** Data + asset tidy: `data/wbc/` sorted into
+  `datasets/ probe/ models/ logs/ smoke/`; `dataset/` -> `data/dataset/`; the
+  low-level-policy wandb cache -> `controllers/ceer/checkpoints/wandb/`;
+  `assets_sim2sim/` -> `forcesense/assets/`; `scripts/exports/` ->
+  `controllers/ceer/checkpoints/`; `paper/` -> `docs/paper/`. Fixed
+  reorg-induced runtime path bugs (`motion.py` dataset root, `motion_tracking.py`
+  hand-samples, `isaac.py`/`play.py` `DEFAULT_OVERRIDES` + wandb cache).
+- **16:06** Reorg phase 2 - co-located each area's config + scripts: CEER
+  `cfg/ scripts/ bash/` -> `controllers/ceer/`; force-sensing `cfg/wbc` ->
+  `forcesense/cfg/`, `bash/wbc_*` -> `forcesense/bash/`; top-level `scripts/`
+  keeps only `start_gentle_local.sh`; `legacy/` -> `archive/` (gitignored).
+  Hydra `config_path` + script `sys.path` are relative, so cfg+scripts moving
+  together kept working. _(ae123dc)_
+- **16:30** Rewrote `README.md` for this codebase; converted this changelog to a
+  dated, time-stamped log; dropped Claude co-author trailers from commits.
+
+Key module moves (old -> new): `scripts/wbc_train_v3.py` ->
+`forcesense/{models.py, common/data.py, train/core.py}`; `wbc_sim2sim.py` ->
+`forcesense/sim2sim.py`; `collect_force_data.py` -> `forcesense/collect/isaac.py`;
+`wbc_collect_mujoco.py` -> `forcesense/collect/mujoco.py`; `wbc_deploy_metrics.py`
+-> `forcesense/common/metrics.py`; `wbc_eval_deploy.py` ->
+`forcesense/eval/eval_deploy.py`; `wbc_export_v4.py` -> `forcesense/export.py`;
+`wbc_crosspolicy*.py` -> `experiments/crosspolicy/*`; `wbc_probe_experiment.py`
+-> `experiments/proact/probe_experiment.py`.
+
+### Earlier — force-sensing research (June-July 2026, pre-reorg)
+
+_These entries predate the reorg; file paths below use the old flat `scripts/`
+layout (see the moves list above for where each lives now)._
 
 ### Added — cross-policy (plug-and-play) generalization test
 Phase-0 existence check for a controller-agnostic force estimator: does a
