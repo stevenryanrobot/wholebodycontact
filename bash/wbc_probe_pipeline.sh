@@ -3,7 +3,7 @@
 # matched datasets, then train+compare leg/trunk localization.
 set -e
 cd ~/Documents/wholebodycontact
-source start_gentle_local.sh >/dev/null 2>&1
+source scripts/start_gentle_local.sh >/dev/null 2>&1
 RUN=luoxinyuan-duke-university/gentle_humanoid/gentle_finetune_3point_amass_limmt_full_stiff30
 ENVS=64
 STEPS=8000

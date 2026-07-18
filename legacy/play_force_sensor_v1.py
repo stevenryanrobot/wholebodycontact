@@ -9,7 +9,7 @@ plus a small marker at each contact point. When they overlap, the sensor is righ
 
 Run on a machine with a display (this repo's box has X on :1):
 
-    source start_gentle_local.sh
+    source scripts/start_gentle_local.sh
     DISPLAY=:1 python scripts/play_force_sensor.py \
         -r luoxinyuan-duke-university/gentle_humanoid/gentle_finetune_3point_amass_limmt_full_stiff30 \
         --model data/wbc/force_sensor.pt --num_envs 4

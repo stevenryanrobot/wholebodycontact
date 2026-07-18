@@ -13,7 +13,7 @@ The pairs are written to an HDF5 file consumed by scripts/train_force_sensor.py.
 No RL training happens here — the robot policy is frozen.
 
 Example:
-    source start_gentle_local.sh
+    source scripts/start_gentle_local.sh
     python forcesense/collect/isaac.py \
         -r luoxinyuan-duke-university/gentle_humanoid/<low_level_run_id> \
         -n 30000 --num_envs 64 -o data/wbc/datasets/wbc_train.h5

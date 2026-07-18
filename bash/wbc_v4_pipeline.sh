@@ -12,7 +12,7 @@ set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
-source start_gentle_local.sh
+source scripts/start_gentle_local.sh
 
 RUN_PATH="luoxinyuan-duke-university/gentle_humanoid/gentle_finetune_3point_amass_limmt_full_stiff30"
 OVERRIDES="cfg/wbc/collect_v4.yaml"

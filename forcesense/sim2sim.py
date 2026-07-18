@@ -7,7 +7,7 @@ in plain MuJoCo (no Isaac), rebuilds its 257-dim "policy" observation and the
 forces via xfrc_applied, and reports predicted vs ground-truth contact.
 
 Usage (headless smoke test):
-    source start_gentle_local.sh
+    source scripts/start_gentle_local.sh
     python forcesense/sim2sim.py                      # stand test + 3 pushes
     python forcesense/sim2sim.py --push-body torso_link --push-force 25
     DISPLAY=:1 python forcesense/sim2sim.py --viewer  # interactive-ish view

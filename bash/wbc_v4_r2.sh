@@ -6,7 +6,7 @@
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
-source start_gentle_local.sh
+source scripts/start_gentle_local.sh
 
 python -u forcesense/train/sweep_v4_r2.py \
     --data data/wbc/datasets/wbc_v4_motion.h5 data/wbc/datasets/wbc_v4_static.h5 \

@@ -138,7 +138,7 @@ that maps proprioception → (which body link is pushed, 3D force vector). When
 the PD controller fights an external push, the deviation in joint torques and
 tracking errors carries the signal; the MLP learns to decode it.
 
-Workflow (run inside the `gentle` env; `source start_gentle_local.sh` first):
+Workflow (run inside the `gentle` env; `source scripts/start_gentle_local.sh` first):
 
 ```bash
 # 1. Collect data: drive a frozen (preferably stiff) low-level policy under
@@ -163,5 +163,5 @@ active_adaptation/   core library (envs, MDP terms, learning algorithms)
 cfg/                 Hydra configs (tasks, training, whole-body-contact in cfg/wbc/)
 scripts/             entry points: train.py, eval.py, collect_force_data.py, train_force_sensor.py
 bash/                launch scripts: train.sh, train_hl*.sh, generate_*.sh (run from repo root)
-start_gentle_local.sh   machine-local env entry point — `source` it before running
+scripts/start_gentle_local.sh   machine-local env entry point — `source` it before running
 ```

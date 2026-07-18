@@ -1,6 +1,6 @@
 """Visualize a trained whole-body force-sensing MLP (Plan A, **v3** dual-head) — offline plots.
 
-    source start_gentle_local.sh
+    source scripts/start_gentle_local.sh
     python scripts/viz_force_sensor_v3.py \
         --data data/wbc/datasets/wbc_train.h5 \
         --model data/wbc/sweep_v3/force_sensor_v3_best.pt \

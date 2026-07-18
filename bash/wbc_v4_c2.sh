@@ -5,7 +5,7 @@
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
-source start_gentle_local.sh
+source scripts/start_gentle_local.sh
 
 MJ_H5="data/wbc/datasets/wbc_v4_mujoco.h5"
 CHAMPION="data/wbc/sweep_v4/champion.json"
