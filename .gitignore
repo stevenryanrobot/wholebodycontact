@@ -230,8 +230,6 @@ experiments/web_demo/dist/
 .claude/
 
 
-# web demo model exports (regenerable, large)
-experiments/web_demo/public/models/*.onnx
 
 # archived v1 code (kept on disk for reference, not tracked)
 archive/

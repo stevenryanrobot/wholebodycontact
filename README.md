@@ -32,7 +32,7 @@ forcesense/          the force-sensing module (our contribution)
   models.py          ForceSensorV3 (MLP), ContactGRUv4
   common/            shared lib: regions.py, data.py, metrics.py
   train/             core.py (trainer), sweep_v3/v4/v4_r2.py, finetune.py, champion.py
-  collect/           isaac.py (Isaac Lab collection), mujoco.py (fast MuJoCo collection)
+  collect/           isaac.py (Isaac Lab collection), mujoco_collect.py (fast MuJoCo collection)
   sim2sim.py         MuJoCo deploy: runs the policy + sensor, computes the residual
   eval/  export.py  viz/  figs.py
   cfg/               collect.yaml, collect_v4.yaml (force-collection observation layout)
@@ -60,7 +60,7 @@ source scripts/start_gentle_local.sh      # note: source, not ./
 pip install -e .                          # once — registers the `active_adaptation` package
 ```
 
-MuJoCo-only work (`forcesense/sim2sim.py`, `forcesense/collect/mujoco.py`, the
+MuJoCo-only work (`forcesense/sim2sim.py`, `forcesense/collect/mujoco_collect.py`, the
 web demo) does **not** need Isaac Sim.
 
 ## Quickstart
@@ -81,7 +81,7 @@ python controllers/ceer/scripts/eval.py --run_path <wandb_run> --export     # ->
 # Isaac Lab (drives the real policy + scripted external pushes):
 python forcesense/collect/isaac.py -r <wandb_run> ...
 # Fast MuJoCo collection (~22x realtime, parallel workers):
-python forcesense/collect/mujoco.py --workers 12 --num_steps 60000 ...
+python forcesense/collect/mujoco_collect.py --workers 12 --num_steps 60000 ...
 ```
 Datasets land in `data/wbc/datasets/`.
 

@@ -33,11 +33,18 @@ and re-composing Hydra under the `gentle` env.
   together kept working. _(ae123dc)_
 - **16:30** Rewrote `README.md` for this codebase; converted this changelog to a
   dated, time-stamped log; dropped Claude co-author trailers from commits.
+- **~17:15** Pointed `origin` at `stevenryanrobot/wholebodycontact` and force-pushed
+  the reorg onto `main` (rewrote history to drop Claude co-author trailers from all
+  commits). Runtime smoke tests pass: force-sensor training and MuJoCo collection
+  both run. Fixed the GitHub Pages deploy workflow (`web_demo` -> `experiments/web_demo`);
+  renamed `forcesense/collect/mujoco.py` -> `mujoco_collect.py` (old name shadowed the
+  `mujoco` package when run as a script -- caught by the smoke test); restored the
+  web-demo ONNX models to version control so the deployed site has them.
 
 Key module moves (old -> new): `scripts/wbc_train_v3.py` ->
 `forcesense/{models.py, common/data.py, train/core.py}`; `wbc_sim2sim.py` ->
 `forcesense/sim2sim.py`; `collect_force_data.py` -> `forcesense/collect/isaac.py`;
-`wbc_collect_mujoco.py` -> `forcesense/collect/mujoco.py`; `wbc_deploy_metrics.py`
+`wbc_collect_mujoco.py` -> `forcesense/collect/mujoco_collect.py`; `wbc_deploy_metrics.py`
 -> `forcesense/common/metrics.py`; `wbc_eval_deploy.py` ->
 `forcesense/eval/eval_deploy.py`; `wbc_export_v4.py` -> `forcesense/export.py`;
 `wbc_crosspolicy*.py` -> `experiments/crosspolicy/*`; `wbc_probe_experiment.py`
