@@ -448,9 +448,20 @@ class Sim2Sim:
         self.sonic_effort_mj = np.asarray(effort_mj, dtype=np.float64)
         self.reset_sonic()
 
-    def reset_sonic(self, root_z=0.793):
+    # Sonic's default_angles put the pelvis at 0.793 m on *their* g1_29dof.xml
+    # (foot spheres exactly on the floor there).  OUR g1.xml has a different
+    # ankle/foot geometry: at pelvis 0.793 the foot spheres float 3.6 cm above
+    # the floor, so the robot free-falls at spawn.  At pelvis 0.755 the 8 foot
+    # spheres (4/foot) firmly contact the floor (verified: ncon=8).  Use that
+    # feet-on-floor height as the Sonic spawn default.
+    SONIC_STAND_Z = 0.755
+
+    def reset_sonic(self, root_z=None):
         """Reset to Sonic's default standing pose (MuJoCo-order default angles).
-        Resets the OUR-Isaac obs history buffers too (they key the wbc_obs)."""
+        Resets the OUR-Isaac obs history buffers too (they key the wbc_obs).
+        root_z defaults to SONIC_STAND_Z (feet-on-floor for OUR g1.xml)."""
+        if root_z is None:
+            root_z = self.SONIC_STAND_Z
         mujoco, m, d = self.mujoco, self.m, self.d
         mujoco.mj_resetData(m, d)
         d.qpos[:] = 0.0

@@ -59,6 +59,60 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
     plumbing (Sonic-driven X[320] + controller-invariant R[29] are finite/well
     formed). => M2 (cross_H_sonic.h5) intentionally NOT produced: a diverging
     policy would yield garbage data. Evidence: data/wbc/sonic/m1_rollout*.npz.
+
+### 2026-07-19 (later) — Sonic M1 deep-debug: two real bugs found, divergence isolated to the policy adapter (NOT our plant)
+
+- **Heading canonicalization checked against the C++ and ruled OUT as the M1
+  blocker for standing.** Read `UpdateHeadingState` / `ComputeApplyDeltaHeading`
+  / `GatherMotionAnchorOrientationMutiFrame` in `g1_deploy_onnx_ref.cpp`. The
+  heading correction (`apply_delta_heading = calc_heading_quat(init_base_quat) *
+  calc_heading_quat_inv(init_ref_root_rot)`) only rotates the ENCODER reference;
+  it enters the decoder solely through the 64-d token. At reset the robot heading
+  is identity and we use a constant-hold reference at identity, so the correction
+  is identity and cannot explain a windup that begins on step 0. Confirmed the
+  released checkpoint uses `motion_anchor_orientation_10frame_step5`
+  (orientation_mode 0, full base quat), per `checkpoints/observation_config.yaml`.
+- **BUG 1 (real, fixed): feet-off-floor spawn.** Sonic's `default_angles` put the
+  pelvis at 0.793 m on THEIR `g1_29dof.xml` (foot spheres exactly on the floor).
+  On OUR `g1.xml` the ankle/foot geometry differs: at pelvis 0.793 the foot
+  spheres float **3.6 cm** above the floor (`ncon=0` -> robot free-falls at
+  spawn). Correct feet-on-floor height for our model is **0.755** (8 foot-sphere
+  contacts, verified). Fixed: `Sim2Sim.SONIC_STAND_Z=0.755`, `reset_sonic` and
+  `sonic_m1_drive.py --root_z` default to it. This roughly doubled time-to-fall
+  (0.62 s -> 1.16 s) but did NOT stop the divergence.
+- **BUG 2 (real): the released decoder is not a zero-bias controller.** Even an
+  all-zero 994-d decoder obs yields |action|=2.1 (maxabs 0.81); the best standing
+  token (constant default-pose hold via the planner-obs encoder path, IsaacLab
+  joint order) still gives |action|=0.86 at the EXACT default+upright+still state,
+  with a spurious L/R ankle-pitch asymmetry (R=0.31 vs L=0.055). So "outputs ~0
+  at default" (earlier claim) is false; standing depends entirely on the feedback
+  loop being correctly signed on the exact plant.
+- **KEY RESULT: the divergence reproduces on Sonic's OWN `g1_29dof.xml`.** Driving
+  the identical `SonicPolicy` adapter against Sonic's own G1 MuJoCo model (clean-
+  room inline PD, no `Sim2Sim`) also winds up and blows up (NaN by ~0.2 s). Since
+  the plant is then correct-by-construction, **the remaining fault is in the obs
+  assembly / policy usage, not in our g1.xml.** This overturns the plant-mismatch
+  hypothesis.
+- **Ablations this session (all still diverge):** constant-hold vs planner token;
+  spawn height 0.745-0.793; passive damping kept vs zeroed, +kd up to 5; action
+  clip at +-10/+-3/+-1 (bounds magnitude, robot still tips -> direction is
+  destabilizing, not just magnitude); last_action history zeroed (halves |a|max
+  but still falls). Re-verified against the C++ and matching: joint remap
+  (bijection, == C++ tables), Sonic kp/kd/scale/effort (== `policy_parameters.hpp`
+  math), decoder obs field order + dims (== `observation_config.yaml`:
+  token64|angvel30|jpos290|jvel290|lastact290|grav30), history layout frame-major
+  oldest->newest step1 (== `GetLatest(newest_first=false)`), gravity_dir
+  = quat_rotate(conj(base_quat),[0,0,-1]) (== `GatherHisGravityDir`), base_ang_vel
+  = qvel[3:6] EMPIRICALLY confirmed body-local (== IMU gyro / IsaacLab
+  root_ang_vel_b). **Narrowed blocker:** a subtle decoder-usage mismatch that
+  survives all field-level checks — candidates not yet excluded: (a) an obs
+  normalization/scale applied at training but absent from the exported ONNX path,
+  (b) the decoder expecting a recurrent/warm-started hidden state we reset each
+  call, (c) reference frames the token must encode that a constant-hold cannot.
+  Definitive next step: run Sonic's own Python eval (`gear_sonic/eval_agent_trl.py`
+  + `utils/mujoco_sim`) to dump a known-good decoder obs+action for one frame and
+  diff numerically against `SonicPolicy._decoder_obs()`. M2 remains NOT produced.
+  Files touched: `forcesense/sim2sim.py` (SONIC_STAND_Z), `experiments/sonic_m1_drive.py`.
 - **Task 3 (contact force from human video).** Assessed as not feasible with our
   robot-proprioception model (needs human pose + human-dynamics model, a separate
   project); skipped per plan.

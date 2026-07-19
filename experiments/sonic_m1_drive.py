@@ -19,7 +19,9 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--xml", default=os.path.join(REPO, "forcesense/assets/g1/g1.xml"))
     p.add_argument("--seconds", type=float, default=8.0)
-    p.add_argument("--root_z", type=float, default=0.793)
+    # 0.755 = feet-on-floor pelvis height for OUR g1.xml (Sonic's 0.793 is for
+    # THEIR g1_29dof.xml; on ours the feet float 3.6 cm and the robot free-falls).
+    p.add_argument("--root_z", type=float, default=0.755)
     p.add_argument("--out", default=os.path.join(REPO, "data/wbc/sonic/m1_rollout.npz"))
     p.add_argument("--token", default=os.path.join(REPO, "data/wbc/sonic/tok_stand_opt.npy"),
                    help="optimized standing token .npy (falls back to encoder if missing)")
@@ -33,6 +35,7 @@ def main():
     from controllers.sonic.sonic_policy import (
         SonicPolicy, SONIC_DEFAULT_MJ, SONIC_KP_MJ, SONIC_KD_MJ,
         SONIC_ACTION_SCALE_MJ, SONIC_EFFORT_MJ)
+    from controllers.sonic.sonic_planner import build_encoder_obs_from_qpos
 
     sim = Sim2Sim(args.xml, wrist_ref_mode="still")
     sim.setup_sonic(SONIC_DEFAULT_MJ, SONIC_KP_MJ, SONIC_KD_MJ,
@@ -40,6 +43,20 @@ def main():
     sim.reset_sonic(root_z=args.root_z)
     policy = SonicPolicy(root_z=args.root_z, token_path=args.token,
                          use_planner=args.use_planner)
+    if not args.use_planner and not (args.token and os.path.exists(args.token)):
+        # Best available standing token: a CONSTANT hold of the default pose fed
+        # through the planner-obs encoder path (IsaacLab joint order).  This is
+        # the lowest-action reference for standing (|a|~0.86 at the exact default
+        # state, vs 5.6 for the hand-built static encoder obs).  The planner's
+        # mode-0 output is NOT static (it emits a stepping gait -> unusable for a
+        # pure stand), so we synthesize the constant reference explicitly.
+        qpos = np.zeros(36, np.float32)
+        qpos[2] = args.root_z; qpos[3] = 1.0
+        qpos[7:36] = SONIC_DEFAULT_MJ.astype(np.float32)
+        enc_obs = build_encoder_obs_from_qpos(
+            np.tile(qpos, (64, 1)), qpos[3:7], joint_order="isaaclab")
+        policy.token = policy.enc.run(
+            None, {"obs_dict": enc_obs})[0].ravel().astype(np.float32)
     policy.prime(sim)
 
     print(f"[m1] token norm={np.linalg.norm(policy.token):.3f}  "
