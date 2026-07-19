@@ -22,6 +22,43 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   no public G1 checkpoint + it is a motion-tracking policy that needs a reference
   clip. Sonic (`NVlabs/GR00T-WholeBodyControl`) has downloadable ONNX/pt weights
   -> integration into our MuJoCo G1 sim in progress.
+  - **Sonic driving adapter built and verified piecewise.** New
+    `forcesense/collect/sonic_policy.py` (SonicPolicy encoder-decoder adapter:
+    obs assembly, name-verified IsaacLab<->MuJoCo joint remap, Sonic PD gains/
+    default pose/action scale reproduced from `policy_parameters.hpp`) and
+    `Sim2Sim.control_step_sonic`/`setup_sonic` (drive our g1.xml with Sonic's
+    own PD while still emitting the 320-dim wbc_obs / controller-invariant
+    residual in OUR Isaac joint order). Verified: (a) remap is a valid bijection
+    matching joint NAMES between Sonic's g1_29dof and our g1.xml (our MJCF joint
+    order == Sonic "MuJoCo order" exactly); (b) Sonic's default pose + gains
+    STAND in our g1.xml under pure PD-to-default; (c) the decoder outputs ~0
+    action at default+upright+still given an optimized "hold-pose" token.
+  - **M1 blocker + resolution path.** A hand-built static token is an unstable
+    fixed point (no basin): closed-loop action diverges 0.12->26 over ~20 steps
+    as tiny joint errors amplify, robot collapses at ~0.6 s. Root cause: the
+    shipped reference example dirs contain only text summaries (no joint_pos/
+    body_quat arrays) and downloads/ lacked the planner ONNX, so no trackable
+    standing reference could be encoded. Downloaded the released kinematic
+    planner (`planner_sonic.onnx`, 774 MB, HF nvidia/GEAR-SONIC) which
+    synthesizes a dynamically-consistent reference from the robot's current qpos
+    (mode 0 = idle stand); `forcesense/collect/sonic_planner.py` wires it into
+    the encoder. M1 harness: `experiments/sonic_m1_drive.py`.
+  - **M1 status: NOT stable (blocker localized, honest).** Even the planner
+    token (real, dynamically-consistent reference; verified encoder joint order
+    is IsaacLab, giving ~0 action at exact default vs 6.1 for MuJoCo order) does
+    NOT yield stable closed-loop standing: action winds up 0.8->29 over ~15-30
+    steps while the robot stays upright and near-default, then collapses at
+    ~0.6-0.8 s. Ablations ruled out: token choice (static vs trajectory vs
+    optimized all identical), his_last_actions feedback (zeroing it doesn't
+    help), history order (newest-first also fails). Remaining gap = a residual
+    proprioception-convention/heading-canonicalization mismatch that only the
+    full 4472-line C++ deploy stack reproduces exactly; obs-reconstruction alone
+    can't hit the sub-0.1-action fidelity Sonic's stiff PD demands. VERIFIED
+    correct: joint remap (bijection by name), Sonic gains/default/scale (pure
+    PD-to-default stands), decoder obs layout, planner integration, and the M2
+    plumbing (Sonic-driven X[320] + controller-invariant R[29] are finite/well
+    formed). => M2 (cross_H_sonic.h5) intentionally NOT produced: a diverging
+    policy would yield garbage data. Evidence: data/wbc/sonic/m1_rollout*.npz.
 - **Task 3 (contact force from human video).** Assessed as not feasible with our
   robot-proprioception model (needs human pose + human-dynamics model, a separate
   project); skipped per plan.

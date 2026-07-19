@@ -273,6 +273,29 @@ class Sim2Sim:
         self.torso_bid = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_BODY, "torso_link")
         self.root_height_cmd = root_height_cmd
 
+        # ---- Sonic (MuJoCo-order) address maps: g1.xml joints 1..29 in MJCF
+        # order are identical by NAME to Sonic's "MuJoCo order" table, so we
+        # build qpos/qvel/actuator address arrays in that order for the Sonic
+        # driving path (control_step_sonic). Kept separate from the OUR-Isaac
+        # maps above so the CEER path is untouched.
+        from forcesense.collect.sonic_policy import SONIC_MJ_JOINTS
+        self.sonic_qadr = np.zeros(NJ, dtype=int)
+        self.sonic_vadr = np.zeros(NJ, dtype=int)
+        self.sonic_aid = np.zeros(NJ, dtype=int)
+        for i, n in enumerate(SONIC_MJ_JOINTS):
+            j = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_JOINT, n)
+            assert j >= 0, f"sonic joint {n} not in MJCF"
+            self.sonic_qadr[i] = self.m.jnt_qposadr[j]
+            self.sonic_vadr[i] = self.m.jnt_dofadr[j]
+            a = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_ACTUATOR, n)
+            assert a >= 0, f"sonic actuator {n} not in MJCF"
+            self.sonic_aid[i] = a
+        # map from OUR-Isaac joint index -> MuJoCo(Sonic) joint index (by name),
+        # used to express Sonic quantities in OUR-Isaac order for wbc_obs().
+        _mj_name_to_pos = {n: k for k, n in enumerate(SONIC_MJ_JOINTS)}
+        self.isaac_to_sonicmj = np.array(
+            [_mj_name_to_pos[n] for n in ISAAC_JOINTS], dtype=int)
+
         self.reset()
 
     # ---------------------------------------------------------------- state
@@ -405,6 +428,100 @@ class Sim2Sim:
         # ---- per-control-step obs buffer update (ISAAC: obs.update() after all
         # substeps; joint_pos_history stores the MEAN of the last two substeps
         # (observations.py:257-268, joint_pos[:, substep % 2].mean)).
+        self.jpos_hist = np.roll(self.jpos_hist, 1, axis=0)
+        self.jpos_hist[0] = jp_sub.mean(0)
+        self.angvel_hist = np.roll(self.angvel_hist, 1, axis=0)
+        self.angvel_hist[0] = self._root_ang_vel_b()
+        self.grav_hist = np.roll(self.grav_hist, 1, axis=0)
+        self.grav_hist[0] = self._proj_grav_b()
+        self.step_count += 1
+
+    # -------------------------------------------------- Sonic driving path
+    def setup_sonic(self, sonic_default_mj, kp_mj, kd_mj, scale_mj, effort_mj):
+        """Install Sonic's PD gains / default pose / action scale (all MuJoCo
+        order) and re-init the robot to Sonic's default standing pose. Call
+        once after constructing Sim2Sim, before the Sonic loop."""
+        self.sonic_default_mj = np.asarray(sonic_default_mj, dtype=np.float64)
+        self.sonic_kp_mj = np.asarray(kp_mj, dtype=np.float64)
+        self.sonic_kd_mj = np.asarray(kd_mj, dtype=np.float64)
+        self.sonic_scale_mj = np.asarray(scale_mj, dtype=np.float64)
+        self.sonic_effort_mj = np.asarray(effort_mj, dtype=np.float64)
+        self.reset_sonic()
+
+    def reset_sonic(self, root_z=0.793):
+        """Reset to Sonic's default standing pose (MuJoCo-order default angles).
+        Resets the OUR-Isaac obs history buffers too (they key the wbc_obs)."""
+        mujoco, m, d = self.mujoco, self.m, self.d
+        mujoco.mj_resetData(m, d)
+        d.qpos[:] = 0.0
+        d.qpos[2] = root_z
+        d.qpos[3] = 1.0
+        d.qpos[self.sonic_qadr] = self.sonic_default_mj
+        d.qvel[:] = 0.0
+        mujoco.mj_forward(m, d)
+        # Sonic q_des starts at default; torques zero.
+        self.sonic_q_des_mj = self.sonic_default_mj.copy()
+        self.applied_torque = np.zeros(NJ, dtype=np.float32)   # OUR-Isaac order
+        self.action_buf = np.zeros((3, NJ), dtype=np.float32)  # OUR-Isaac order raw action
+        self.q_des = d.qpos[self.qadr].astype(np.float32)      # OUR-Isaac order q_des
+        # OUR-Isaac obs history (jpos in OUR-Isaac order; used by wbc_obs)
+        self.jpos_hist = np.tile(d.qpos[self.qadr], (5, 1)).astype(np.float32)
+        self.angvel_hist = np.tile(self._root_ang_vel_b(), (5, 1)).astype(np.float32)
+        self.grav_hist = np.tile(self._proj_grav_b(), (5, 1)).astype(np.float32)
+        self.step_count = 0
+
+    def control_step_sonic(self, action_mj, ext_force_w=None, ext_body=None):
+        """One 50 Hz control step driven by Sonic. action_mj: 29-dim scaled
+        action delta ALREADY in MuJoCo(g1.xml) order (SonicPolicy.act output).
+        Applies Sonic PD (no EMA, no clip — Sonic uses raw q_target each tick):
+            q_target[mj] = default_mj + action_mj * scale_mj
+            tau = kp*(q_target-q) - kd*qd,  clipped to Sonic effort limits.
+        Updates wbc_obs feature state expressed in OUR-Isaac order."""
+        mujoco, m, d = self.mujoco, self.m, self.d
+        action_mj = np.asarray(action_mj, dtype=np.float64).reshape(NJ)
+        # roll OUR-Isaac-order raw action buffer (action_buf feeds wbc_obs).
+        self.action_buf = np.roll(self.action_buf, 1, axis=0)
+        self.action_buf[0] = action_mj[self.isaac_to_sonicmj].astype(np.float32)
+
+        q_target_mj = self.sonic_default_mj + action_mj * self.sonic_scale_mj
+        self.sonic_q_des_mj = q_target_mj
+        jp_sub = np.zeros((2, NJ))
+        for sub in range(self.DECIMATION):
+            q = d.qpos[self.sonic_qadr]
+            dq = d.qvel[self.sonic_vadr]
+            tau_mj = self.sonic_kp_mj * (q_target_mj - q) - self.sonic_kd_mj * dq
+            tau_mj = np.clip(tau_mj, -self.sonic_effort_mj, self.sonic_effort_mj)
+            # honor the MJCF 0.8*ctrlrange clip in MuJoCo order too
+            lo = 0.8 * self.m.actuator_ctrlrange[self.sonic_aid, 0]
+            hi = 0.8 * self.m.actuator_ctrlrange[self.sonic_aid, 1]
+            tau_mj = np.clip(tau_mj, lo, hi)
+            d.ctrl[self.sonic_aid] = tau_mj
+
+            d.xfrc_applied[:] = 0.0
+            if ext_force_w is not None and np.linalg.norm(ext_force_w) > 1e-9:
+                b = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, ext_body)
+                F = np.asarray(ext_force_w, dtype=np.float64)
+                r_com = d.xpos[b] - d.xipos[b]
+                d.xfrc_applied[b, :3] = F
+                d.xfrc_applied[b, 3:] = np.cross(r_com, F)
+                r = d.xpos[b] - d.xpos[self.torso_bid]
+                M = np.cross(r, F)
+                Mn = np.linalg.norm(M)
+                if Mn > NET_TORQUE_LIMIT:
+                    dM = M * (NET_TORQUE_LIMIT / Mn - 1.0)
+                    d.xfrc_applied[self.torso_bid, 3:] += dM
+                Fn = np.linalg.norm(F)
+                if Fn > NET_FORCE_LIMIT:
+                    d.xfrc_applied[b, :3] *= NET_FORCE_LIMIT / Fn
+
+            mujoco.mj_step(m, d)
+            if sub >= 2:
+                jp_sub[sub - 2] = d.qpos[self.qadr]   # OUR-Isaac order for wbc_obs
+
+        # applied_torque / q_des expressed in OUR-Isaac order (wbc_obs layout).
+        self.applied_torque = tau_mj[self.isaac_to_sonicmj].astype(np.float32)
+        self.q_des = q_target_mj[self.isaac_to_sonicmj].astype(np.float32)
+        # OUR-Isaac obs history update (mirrors control_step).
         self.jpos_hist = np.roll(self.jpos_hist, 1, axis=0)
         self.jpos_hist[0] = jp_sub.mean(0)
         self.angvel_hist = np.roll(self.angvel_hist, 1, axis=0)
