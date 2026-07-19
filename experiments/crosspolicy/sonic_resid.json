@@ -1,0 +1,22 @@
+[
+  {
+    "det_f1": 0.9457634372909501,
+    "det_prec": 0.9896916457511358,
+    "det_rec": 0.9055690734614402,
+    "region_acc": 0.940536402657382,
+    "active_acc": 0.9040380567022747,
+    "n": 59990,
+    "n_pos": 36577,
+    "set": "[A_base+B_soft+C_stiff+D_softud+E_vstiff+F_underd+G_overd] IN-DOMAIN val"
+  },
+  {
+    "det_f1": 0.9259325077307546,
+    "det_prec": 0.9920735670471575,
+    "det_rec": 0.868059412363206,
+    "region_acc": 0.923473037397084,
+    "active_acc": 0.8629454705404035,
+    "n": 359940,
+    "n_pos": 225071,
+    "set": "cross_H_sonic.h5 (kp1.0) [UNSEEN-controller]"
+  }
+]

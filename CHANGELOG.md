@@ -5,7 +5,12 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased] — branch `wholebodycontact`
 
-### 2026-07-19 — overnight experiments
+
+
+- **Task 2 SOLVED — residual plug-and-play validated on a real different policy (Sonic/GR00T).** Fixed the Sonic driving (obs joint-gather used i2m instead of its inverse m2i -> 27/29 joints mis-permuted; one-line fix, obs now matches Sonic's C++ oracle to <6e-8, robot stands 8 s). Collected data/wbc/cross/cross_H_sonic.h5 (360k, same format). Trained the sensor on the 7 CEER controllers, evaluated frozen on Sonic (unseen policy):
+    - **raw proprioception: regAcc 0.749 (CEER) -> 0.147 (Sonic)** -- collapses.
+    - **residual (ours):       regAcc 0.941 (CEER) -> 0.923 (Sonic)** -- holds (plug-and-play).
+  Far stronger than the kp-scaled proxy (0.905 vs 0.417): a genuinely different policy architecture. Figure experiments/crosspolicy/sonic_vs_ceer.png.
 
 - **Sonic (GR00T-WBC) integration bug FIXED — joint-order gather in the decoder
   proprio obs.** The imported Sonic policy diverged (robot fell ~1.2 s) because
