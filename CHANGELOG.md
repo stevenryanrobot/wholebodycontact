@@ -7,6 +7,28 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### 2026-07-19 — overnight experiments
 
+- **~11:44** **Residual force sensor added to the web demo (selectable in the
+  HUD).** The demo now offers both force-sensing methods side by side: the
+  proprioceptive v3/v4c sensors (320-dim obs) and a new **residual** sensor that
+  reads the 29-dim controller-invariant external-torque channel.
+  - Training: `forcesense/train/core.py` gained `--feat {proprio,resid}` (+
+    `--n_envs`); `load_grid` gained `x_key` to source the input from the h5 `R`
+    (residual) dataset instead of `X`. Trained a v3-arch 5-region model on
+    `data/wbc/cross/cross_A_base.h5` (base-gain controller = the demo's policy);
+    val det_prec **0.995** / det_f1 0.938 / region active_acc 0.86 / dir cos 0.70.
+    `export.py` carries `input_source` into the meta.
+  - Demo: `Sim2Sim.residChannel()` computes the residual in JS from live MuJoCo
+    heap views as `qfrc_smooth + qfrc_bias − qfrc_actuator − qfrc_passive`
+    (indexed at the 29 ISAAC joint dofs) — the equation-of-motion identity
+    `M q̈ = qfrc_smooth + qfrc_constraint` cancels the GRF term, so no `mj_fullM`
+    / `qfrc_constraint` is needed; matches the Python `ext_torque_residual` to
+    < 1.2e-7. `main.js` feeds `residChannel()` vs `wbcObs()` by `meta.input_source`;
+    all downstream viz (norm/decode/heatmap/arrow/curve) is unchanged.
+  - Verified `node test/resid_check.mjs` (real pipeline): rest FP raw **0.000**;
+    torso/arm/leg 25 N pushes all det 1.00, arm dir cos ~0.99. Visible
+    differentiator: a left-knee push localizes to **left_leg** (acc 1.00) where
+    proprioceptive v4c mislocalizes it to trunk (smoke test, acc 0.00). Proprio
+    smoke test + production build unregressed.
 - **~00:45** **Task 1 (position- vs current-based force sensing).** Trained the
   contact sensor with 3 torque-channel variants (same data/config): A = measured
   torque (current proxy), B = torque reconstructed from position via the PD law

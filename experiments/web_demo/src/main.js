@@ -51,6 +51,7 @@ const OP_POINTS = {
   force_sensor_v4c_restboost: { thHi: 0.4, thLo: 0.25, k: 3 },
   force_sensor_v4: { thHi: 0.85, thLo: 0.75, k: 3 },
   force_sensor_v3: { thHi: 0.5, thLo: 0.35, k: 3 },
+  force_sensor_resid: { thHi: 0.5, thLo: 0.35, k: 3 },
 };
 
 /** Operating point for a model: meta.recommended if present, else the map. */
@@ -353,7 +354,12 @@ async function startSimLoop() {
           const action = await onnx.runPolicy(sim.policyObs());
           sim.controlStep(action, F, bodyId);
           if (!USE_FAKE_SENSOR && !switching && onnx.sensor) {
-            latestRaw = await onnx.sensor.run(sim.wbcObs());
+            // residual models consume the 29-dim controller-invariant channel;
+            // proprioceptive models consume the 320-dim wbc obs frame.
+            const frame = onnx.meta?.input_source === 'resid'
+              ? sim.residChannel()
+              : sim.wbcObs();
+            latestRaw = await onnx.sensor.run(frame);
             // debounced detection gate — one update per 50 Hz sensor tick
             contactOn = gate.update(sigmoid(latestRaw.det_logit[0]));
           }

@@ -116,15 +116,20 @@ def impedance_normalize(x, kp, kd, qdef, eps=IMP_EPS):
 # --------------------------------------------------------------------------- #
 # data: load h5 file(s) once, reshape/concat to [T, E, *], keep on GPU
 # --------------------------------------------------------------------------- #
-def load_grid(path, device, n_envs=128):
+def load_grid(path, device, n_envs=128, x_key="X"):
     """path: str or list of str. Multiple files are concatenated along the
-    TIME axis (grid['seg_bounds'] marks the file boundaries for build_index)."""
+    TIME axis (grid['seg_bounds'] marks the file boundaries for build_index).
+
+    x_key selects the input-feature dataset: "X" = raw 320-dim proprioception
+    (default), "R" = the 29-dim policy-invariant residual channel (controller-
+    agnostic external joint-torque estimate; see docs/residual_method_explained).
+    Labels always come from "Y"; only the input source changes."""
     paths = [path] if isinstance(path, str) else list(path)
     Xs, Ys, seg_bounds = [], [], [0]
     body_names = force_max = K = None
     for p in paths:
         with h5py.File(p, "r") as h:
-            X = h["X"][:]                          # [N, D]
+            X = h[x_key][:]                        # [N, D]
             Y = h["Y"][:]                          # [N, 9+K+6]
             bn = [b.decode() if isinstance(b, bytes) else str(b)
                   for b in h.attrs["body_names"]]

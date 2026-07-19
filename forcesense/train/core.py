@@ -106,8 +106,10 @@ def run_experiment(cfg, grid=None):
     g = lambda k, d: cfg.get(k, d)
     device = g("device", "cuda" if torch.cuda.is_available() else "cpu")
     torch.manual_seed(g("seed", 0)); np.random.seed(g("seed", 0))
+    feat = g("feat", "proprio")                 # "proprio" (X) | "resid" (R)
+    x_key = "R" if feat == "resid" else "X"
     if grid is None:
-        grid = load_grid(cfg["data"], device, g("n_envs", 128))
+        grid = load_grid(cfg["data"], device, g("n_envs", 128), x_key=x_key)
     T, E, D = grid["T"], grid["E"], grid["D"]
     W = g("window", 1)
     arch = g("arch", "mlp")                     # "mlp" | "gru"
@@ -301,7 +303,7 @@ def run_experiment(cfg, grid=None):
                 "force_max": grid["force_max"], "body_names": names,
                 "regions": g("regions", False), "det_thresh": det_thresh,
                 "contact_thresh": g("contact_thresh", 0.05),
-                "imp_norm": bool(imp)}
+                "imp_norm": bool(imp), "input_source": feat}
         if arch == "gru":
             ckpt.update({"gru_hidden": g("gru_hidden", 384),
                          "gru_layers": g("gru_layers", 2)})
@@ -321,6 +323,11 @@ def main():
     p.add_argument("--out", type=str, default="data/wbc/models/force_sensor_v3.pt")
     p.add_argument("--arch", type=str, default="mlp", choices=["mlp", "gru"])
     p.add_argument("--imp_norm", action="store_true")
+    p.add_argument("--feat", choices=["proprio", "resid"], default="proprio",
+                   help="input channel: proprio=raw 320-dim obs (X), "
+                        "resid=29-dim controller-invariant residual (R)")
+    p.add_argument("--n_envs", type=int, default=128,
+                   help="worker columns per h5 (cross datasets use 12)")
     p.add_argument("--window", type=int, default=6)
     p.add_argument("--regions", action="store_true")
     p.add_argument("--drop_ramp", action="store_true")

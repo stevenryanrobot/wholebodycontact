@@ -4,8 +4,11 @@ Browser-based demo of proprioceptive whole-body contact force sensing on the
 Unitree G1, in the spirit of <https://gentle-humanoid.axell.top/#/demo>:
 MuJoCo compiled to WASM + ONNX Runtime Web + three.js, fully client-side.
 
-The robot is balanced by the exported low-level ONNX policy; the v3 contact
-force sensor runs on proprioception only. Left-drag on the robot to pull it
+The robot is balanced by the exported low-level ONNX policy. Two force-sensing
+methods are selectable in the HUD: the **proprioceptive** sensors (v3/v4c) that
+read the raw 320-dim obs frame, and the **residual** sensor that reads a 29-dim
+controller-invariant external-torque channel computed from the equation of
+motion (see below). Left-drag on the robot to pull it
 (up to 40 N, red arrow); the sensor's prediction is shown as a green arrow
 (direction * magnitude at the predicted-region centroid), a per-region heatmap
 on the robot, HUD probability bars, and a rolling applied-vs-predicted force
@@ -59,6 +62,36 @@ probability with marker lines at the active thresholds.
   0.93-0.97; identical in the Python prototype, so not a JS bug) — hence its
   fallback gate sits above the rest plateau at 0.85/0.75. Superseded by v4c.
 - **v3** `models/force_sensor_v3.onnx`: W=6, 5-region head, rest FP 0.042.
+- **residual** `models/force_sensor_resid.onnx`: W=6, 5-region head, but the
+  input is NOT proprioception — it is the 29-dim controller-invariant residual
+  channel (`meta.input_source == "resid"`, base_dim 29 vs 320). The demo
+  detects this flag and feeds `Sim2Sim.residChannel()` instead of `wbcObs()`;
+  everything downstream (window, per-feature norm from meta, det/loc/dir/mag
+  decode, heatmap, green arrow, curve) is unchanged. Trained on
+  `data/wbc/cross/cross_A_base.h5` (base-gain controller, matching the demo's
+  policy) via `forcesense.train.core --feat resid`. `node test/resid_check.mjs`
+  (real pipeline): rest FP raw 0.000; det 1.00 for torso/arm/leg 25 N pushes;
+  arm dir cos ~0.99. The visible differentiator vs proprioception: a left-knee
+  push localizes to **left_leg** (region acc 1.00), where v4c mislocalizes it
+  to trunk — the residual explicitly cancels the ground-reaction term, so
+  stance masking on the legs is removed. (Under the single demo controller the
+  no-false-positive and controller-invariance properties are guaranteed by
+  construction; the full plug-and-play win needs a controller change, which
+  this demo does not expose.)
+
+  ### Residual channel (how it's computed in JS)
+
+  Training defines the residual (`forcesense/sim2sim.py:ext_torque_residual`,
+  see `docs/residual_method_explained.md`) as
+  `M(q) q̈ + qfrc_bias − qfrc_actuator − qfrc_passive − qfrc_constraint`,
+  the external generalized force `J_cᵀ F_ext` on the 29 actuated dofs. MuJoCo's
+  equation of motion gives `M q̈ = qfrc_smooth + qfrc_constraint`, so the
+  constraint (GRF) term cancels and the demo computes the identical quantity as
+  `qfrc_smooth + qfrc_bias − qfrc_actuator − qfrc_passive` — no `mj_fullM` /
+  `mj_mulM` and no `qfrc_constraint` needed, all live TypedArray heap views.
+  Verified against the Python prototype to < 1.2e-7 abs over 300 control ticks.
+  Read post-step (last substep's forward dynamics), same cadence as the
+  collected R channel, indexed at the ISAAC-order joint dof addresses (`vadr`).
 - drag force: applied at the LINK FRAME ORIGIN (CoM-offset torque correction)
   with the 20 N·m net-torque-about-torso limiter, capped at 40 N (sensor
   training range 10-40 N).
@@ -76,6 +109,8 @@ npm run build        # production build into dist/
 npm run preview      # serve dist/
 npm run smoke        # headless Node test of the REAL pipeline:
                      #   10 s policy standing + 4 instrumented 25 N pushes
+node test/resid_check.mjs   # same pipeline, the RESIDUAL sensor:
+                     #   rest FP + torso/arm/LEG pushes off residChannel()
 node test/browser_check.mjs http://localhost:5173   # drives system Chrome:
                      # boot, policy standing, torso + arm drags with live
                      # sensor readouts, Reset recovery, screenshots
@@ -159,6 +194,7 @@ src/onnx.js           ort sessions, action-by-position, meta-driven SensorRunner
                       loadSensor/switchSensor for the HUD model picker
 src/hud.js            DOM panel + model picker
 test/node_smoke.mjs   headless REAL-pipeline test (port of the Python harness)
+test/resid_check.mjs  headless REAL-pipeline test of the residual sensor
 test/browser_check.mjs headless-Chrome end-to-end check
 public/assets/g1/     G1 MJCF + 35 referenced STL meshes
 public/models/        policy.onnx + policy.json,
@@ -167,6 +203,8 @@ public/models/        policy.onnx + policy.json,
                       force_sensor_v4c_restboost.onnx + meta.json (quietest rest),
                       force_sensor_v4.onnx + meta.json (24 links, W=10),
                       force_sensor_v3.onnx + meta.json (5 regions, W=6),
+                      force_sensor_resid.onnx + meta.json (residual channel,
+                        5 regions, W=6, base_dim 29, input_source "resid"),
                       region_map.json (24 links -> 5 regions)
 ```
 

@@ -74,6 +74,7 @@ export class Sim2Sim {
     this._q4 = new Float64Array(4);
     this._policyObs = new Float32Array(257);
     this._wbcObs = new Float32Array(320);
+    this._residObs = new Float32Array(NJ);
 
     this.reset();
   }
@@ -282,6 +283,32 @@ export class Sim2Sim {
     for (const h of this.gravHist) { out.set(h, o); o += 3; }
     for (const a of this.actionBuf) { out.set(a, o); o += NJ; }
     if (o !== 320) throw new Error(`wbc obs ${o} != 320`);
+    return out;
+  }
+
+  /**
+   * 29-dim policy-INVARIANT residual channel (controller-agnostic external
+   * joint-torque estimate; the "residual method", see
+   * docs/residual_method_explained.md). The training definition is
+   *   resid = M(q) qacc + qfrc_bias - qfrc_actuator - qfrc_passive - qfrc_constraint
+   * (forcesense/sim2sim.py:ext_torque_residual). MuJoCo's equation of motion
+   * gives M qacc = qfrc_smooth + qfrc_constraint, so the constraint (GRF) term
+   * cancels and this reduces to
+   *   resid = qfrc_smooth + qfrc_bias - qfrc_actuator - qfrc_passive
+   * — no mj_fullM / mj_mulM, no qfrc_constraint needed. Verified against the
+   * Python prototype to < 1.2e-7 abs over 300 control ticks. Read post-step
+   * (last substep's forward dynamics), same cadence as the collected R channel.
+   * Values are the 29 actuated-joint dofs in ISAAC_JOINTS order (via vadr).
+   */
+  residChannel() {
+    const d = this.d;
+    const smooth = d.qfrc_smooth, bias = d.qfrc_bias,
+          act = d.qfrc_actuator, pas = d.qfrc_passive;
+    const out = this._residObs, vadr = this.vadr;
+    for (let i = 0; i < NJ; i++) {
+      const v = vadr[i];
+      out[i] = smooth[v] + bias[v] - act[v] - pas[v];
+    }
     return out;
   }
 }

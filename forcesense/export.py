@@ -74,6 +74,7 @@ def main():
         "force_max": ckpt["force_max"],
         "contact_thresh": ckpt["contact_thresh"],
         "imp_norm": bool(ckpt.get("imp_norm", False)),
+        "input_source": ckpt.get("input_source", "proprio"),
     }
     if arch == "gru_v4":
         meta.update({"gru_hidden": ckpt["gru_hidden"], "gru_layers": ckpt["gru_layers"]})
