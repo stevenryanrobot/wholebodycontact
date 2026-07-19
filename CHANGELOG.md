@@ -5,6 +5,27 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased] — branch `wholebodycontact`
 
+### 2026-07-19 — overnight experiments
+
+- **~00:45** **Task 1 (position- vs current-based force sensing).** Trained the
+  contact sensor with 3 torque-channel variants (same data/config): A = measured
+  torque (current proxy), B = torque reconstructed from position via the PD law
+  `kp(q_des-q)-kd*qd` (NO current), C = no torque. Result: **B ~= A**
+  (active_acc 0.441 vs 0.440, det_f1 0.597 vs 0.602, force_cos 0.310 vs 0.313);
+  even C is only marginally worse. Per-joint measured-vs-reconstructed torque
+  correlation **median 0.974** (all 29 joints >=0.80). => the sensor can drop
+  current sensing and reconstruct torque from encoders with negligible loss.
+  Code `experiments/posforce/`, writeup `experiments/posforce/RESULTS.md`.
+  Stiffness-dependence left as WIP (cross data has mismatched actuator gains).
+- **Task 2 (deploy Sonic/GR00T + BeyondMimic; test residual plug-and-play on
+  real policies).** BeyondMimic (`HybridRobotics/whole_body_tracking`) blocked:
+  no public G1 checkpoint + it is a motion-tracking policy that needs a reference
+  clip. Sonic (`NVlabs/GR00T-WholeBodyControl`) has downloadable ONNX/pt weights
+  -> integration into our MuJoCo G1 sim in progress.
+- **Task 3 (contact force from human video).** Assessed as not feasible with our
+  robot-proprioception model (needs human pose + human-dynamics model, a separate
+  project); skipped per plan.
+
 ### 2026-07-18 — repository reorganization, data tidy, docs
 
 Newest first; times are rough. The reorg changed **no behavior** — pure
