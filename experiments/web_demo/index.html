@@ -44,6 +44,8 @@
       flex: 1; background: #323a45; color: var(--panel-fg);
       border: 1px solid #444d59; border-radius: 5px; padding: 2px 4px; font-size: 12px;
     }
+    #grabbing-val { color: #9aa5b1; font-size: 11px; }
+    #grabbing-val.active { color: #ffb454; font-weight: 600; }
     #region-bars { max-height: 300px; overflow-y: auto; }
     .region-row { display: grid; grid-template-columns: 64px 1fr 34px; gap: 6px; align-items: center; margin: 2px 0; }
     .region-row .bar-wrap { margin: 0; height: 8px; }
@@ -124,6 +126,7 @@
       <div id="region-bars"></div>
       <div class="row"><span>applied</span><span class="readout applied" id="applied-val">0.0 N</span></div>
       <div class="row"><span>predicted</span><span class="readout predicted" id="predicted-val">0.0 N</span></div>
+      <div class="row"><span>grabbing</span><span class="readout" id="grabbing-val">—</span></div>
       <div class="buttons">
         <button id="btn-pause">Pause</button>
         <button id="btn-reset">Reset</button>

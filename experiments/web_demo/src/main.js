@@ -444,6 +444,7 @@ function startRenderLoop() {
       viz.last.magN,
       viz.last.contactOn,
     );
+    hud.setGrabbed(applied?.bodyName ?? null);
 
     if (now - lastLog >= 1000) {
       lastLog = now;

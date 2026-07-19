@@ -20,6 +20,7 @@ export class Hud {
       reset: document.getElementById('btn-reset'),
       modelSelect: document.getElementById('model-select'),
       dragLabel: document.getElementById('drag-label'),
+      grabbing: document.getElementById('grabbing-val'),
     };
 
     // Bars for the localization heads. 5-region models -> 5 bars; 24-link
@@ -61,6 +62,16 @@ export class Hud {
   }
 
   hideStatus() { this.el.status.style.display = 'none'; }
+
+  /** Show which MuJoCo body the drag currently grabs (null = not grabbing).
+   * The hands hang next to the hips, so a "grab the hand" click easily lands on
+   * a hip/thigh body instead — surfacing the grabbed body makes the resulting
+   * region prediction (e.g. a leg) legible rather than looking like a mislocalize. */
+  setGrabbed(bodyName) {
+    if (!this.el.grabbing) return;
+    this.el.grabbing.textContent = bodyName ?? '—';
+    this.el.grabbing.classList.toggle('active', !!bodyName);
+  }
 
   /** Reposition the det-bar threshold markers (per-model operating point). */
   setThresholds(lo, hi) {

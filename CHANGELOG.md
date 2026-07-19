@@ -5,7 +5,15 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased] — branch `wholebodycontact`
 
-
+- **Web demo: HUD now shows the grabbed body ("grabbing" readout).** Diagnosed a
+  reported "dragging the hand lights up the leg" issue on the residual sensor:
+  NOT a sensor error. The G1's hands hang right next to the hips, so on screen a
+  "grab the hand" click easily lands on `left_hip_roll_link`/`pelvis` instead
+  (confirmed by pixel-probing `drag.current()`: the hand and hip pick-targets are
+  ~90px apart) — the residual sensor then correctly reports the leg. Headless
+  pushes to the actual wrist/elbow (≤40 N, all directions, static + dynamic) give
+  `left_arm/right_arm` ≈0.99 with leg-joint residual ≡0. Surfacing the grabbed
+  body (`hud.setGrabbed(drag.current()?.bodyName)`) makes the prediction legible.
 
 - **Task 2 SOLVED — residual plug-and-play validated on a real different policy (Sonic/GR00T).** Fixed the Sonic driving (obs joint-gather used i2m instead of its inverse m2i -> 27/29 joints mis-permuted; one-line fix, obs now matches Sonic's C++ oracle to <6e-8, robot stands 8 s). Collected data/wbc/cross/cross_H_sonic.h5 (360k, same format). Trained the sensor on the 7 CEER controllers, evaluated frozen on Sonic (unseen policy):
     - **raw proprioception: regAcc 0.749 (CEER) -> 0.147 (Sonic)** -- collapses.
