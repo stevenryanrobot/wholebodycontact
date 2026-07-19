@@ -278,7 +278,7 @@ class Sim2Sim:
         # build qpos/qvel/actuator address arrays in that order for the Sonic
         # driving path (control_step_sonic). Kept separate from the OUR-Isaac
         # maps above so the CEER path is untouched.
-        from forcesense.collect.sonic_policy import SONIC_MJ_JOINTS
+        from controllers.sonic.sonic_policy import SONIC_MJ_JOINTS
         self.sonic_qadr = np.zeros(NJ, dtype=int)
         self.sonic_vadr = np.zeros(NJ, dtype=int)
         self.sonic_aid = np.zeros(NJ, dtype=int)

@@ -164,7 +164,7 @@ class SonicPolicy:
                  planner_mode=0, planner_qpos=None,
                  providers=("CPUExecutionProvider",)):
         import onnxruntime as ort
-        base = os.path.expanduser("~/wbc_external/sonic_groot/downloads")
+        base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "checkpoints")
         enc_path = enc_path or os.path.join(base, "model_encoder.onnx")
         dec_path = dec_path or os.path.join(base, "model_decoder.onnx")
         self.enc = ort.InferenceSession(enc_path, providers=list(providers))

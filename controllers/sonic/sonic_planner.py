@@ -27,7 +27,7 @@ from .sonic_policy import (
     _OFF_JPOS, _OFF_JVEL, _OFF_ROOTZ10, _OFF_ROOTZ, _OFF_ANCHOR1, _OFF_ANCHOR10,
 )
 
-PLANNER_PATH = os.path.expanduser("~/wbc_external/sonic_groot/downloads/planner_sonic.onnx")
+PLANNER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "checkpoints", "planner_sonic.onnx")
 
 MODE_IDLE = 0
 MODE_WALK = 2

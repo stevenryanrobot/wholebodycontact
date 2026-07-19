@@ -30,7 +30,7 @@ def main():
     args = p.parse_args()
 
     from forcesense.sim2sim import Sim2Sim
-    from forcesense.collect.sonic_policy import (
+    from controllers.sonic.sonic_policy import (
         SonicPolicy, SONIC_DEFAULT_MJ, SONIC_KP_MJ, SONIC_KD_MJ,
         SONIC_ACTION_SCALE_MJ, SONIC_EFFORT_MJ)
 
