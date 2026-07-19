@@ -7,6 +7,28 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### 2026-07-19 — overnight experiments
 
+- **Sonic (GR00T-WBC) integration bug FIXED — joint-order gather in the decoder
+  proprio obs.** The imported Sonic policy diverged (robot fell ~1.2 s) because
+  `SonicPolicy._frame` gathered `joint_pos`/`joint_vel` from MuJoCo→IsaacLab
+  order using `isaaclab_to_mujoco` (`i2m`) where the correct map is its inverse
+  `mujoco_to_isaaclab` (`m2i`). Verified against the production deploy
+  obs-builder `g1_deploy_onnx_ref.cpp` l.2829-2831
+  (`body_q[i]=q[m2i[i]]-default[m2i[i]]`, `body_dq[i]=dq[m2i[i]]`). The two maps
+  are inverses (not equal), so 270/290 dims of both the q-default and dq history
+  blocks were mis-permuted; token/ang_vel/last_action/gravity were already
+  correct. Numerical proof in `data/wbc/sonic/make_ref_and_diff.py`: pre-fix
+  q-block max|Δ|=0.226, dq max|Δ|=0.421, action max|Δ|=0.893; post-fix all 994
+  decoder dims match the C++ oracle to <6e-8 and the action to 5e-7. One-line
+  fix in `controllers/sonic/sonic_policy.py` (`i2m`→`m2i` for the gather).
+  - Evidence: `experiments/sonic_m1_drive.py` now holds OUR `g1.xml` for the
+    full 8 s (z=0.766, tilt 4.4°, |act|~3.0 steady); the pre-fix `i2m` gather
+    falls at t=1.16 s (z=0.38, tilt 45°). Ref tuple saved to
+    `data/wbc/sonic/ref_obs.npz`.
+  - New cross-controller dataset `data/wbc/cross/cross_H_sonic.h5`
+    (`forcesense/collect/sonic_cross_collect.py`): identical X[·,320]/R[·,29]/
+    G[·,29]/Y[·,39] format and push scheduler as `mujoco_collect.py`, but the
+    robot is driven by the external Sonic decoder (its own gains/defaults/scale)
+    — the cross-policy axis SixthSense never tests.
 - **~11:44** **Residual force sensor added to the web demo (selectable in the
   HUD).** The demo now offers both force-sensing methods side by side: the
   proprioceptive v3/v4c sensors (320-dim obs) and a new **residual** sensor that

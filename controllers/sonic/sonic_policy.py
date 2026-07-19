@@ -230,8 +230,14 @@ class SonicPolicy:
         q_mj = sim.d.qpos[sim.sonic_qadr].astype(np.float32)     # MuJoCo order
         dq_mj = sim.d.qvel[sim.sonic_vadr].astype(np.float32)
         qrel_mj = q_mj - self.default_mj.astype(np.float32)
-        qrel_il = qrel_mj[self.i2m]      # -> IsaacLab order
-        dq_il = dq_mj[self.i2m]
+        # MuJoCo -> IsaacLab GATHER uses mujoco_to_isaaclab (m2i): isaaclab slot i
+        # reads mujoco element m2i[i]. Verified against the production deploy
+        # g1_deploy_onnx_ref.cpp l.2829-2831:
+        #   body_q[i]  = q[m2i[i]] - default[m2i[i]]   ;  body_dq[i] = dq[m2i[i]]
+        # (i2m is its inverse and is only correct for SCATTERING an IsaacLab-order
+        #  action back onto mujoco slots, as in act(): action_mj = action_il[i2m].)
+        qrel_il = qrel_mj[self.m2i]      # -> IsaacLab order
+        dq_il = dq_mj[self.m2i]
         angvel = sim._root_ang_vel_b().astype(np.float32)        # base frame rad/s
         grav = sim._proj_grav_b().astype(np.float32)             # projected gravity, base frame
         return angvel, qrel_il, dq_il, grav
